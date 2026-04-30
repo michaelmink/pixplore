@@ -1,0 +1,44 @@
+
+# Dataset Configuration
+dataset:
+  name: custom_image_dataset
+  raw_path: /app/images/raw
+  debug_path: /app/images/debug/
+  label_path: /app/images/labels/
+
+# Supported Image Formats
+image_formats:
+  - .jpg
+  - .jpeg
+  - .png
+
+# Labels Mapping
+labels:
+  0: joris
+  1: nele
+  2: janine
+  3: michi
+
+# Face Detection Model Configuration
+models:
+  face_detection:
+    model_name: det_10g.onnx # source: wget https://github.com/yakhyo/face-reidentification/releases/download/v0.0.1/det_10g.onnx
+    #model_name: det_500m.onnx  # source: wget https://github.com/yakhyo/face-reidentification/releases/download/v0.0.1/det_500m.onnx
+    debug: True
+    generate_crops: True
+    confidence_threshold: 0.5
+
+# Database Settings for Image Tagging Application
+# using SQLlite for simplicity
+database:
+  type: sqlite
+  name: image_tagger_db.sqlite3
+
+# Logging Configuration
+logging:
+  level: INFO
+  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  file: image_tagger.log
+  console: true
+
+
