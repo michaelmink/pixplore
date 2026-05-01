@@ -3,13 +3,19 @@ import streamlit as st
 from PIL import Image
 import os
 import math
+import yaml
 
 # -------------------------------
 # Konfiguration
 # -------------------------------
-RAW_DIR = "images/debug"       # Originalbilder
-THUMBNAIL_SIZE = (150, 150)  # Max Thumbnail Größe
-MAX_IMAGE_WIDTH = 800        # Breite für vergrößertes Bild
+# load config
+with open('config.yaml', "r") as f:
+    CONFIG = yaml.safe_load(f)
+
+RAW_DIR = CONFIG['pcloud']['local_path']       # Originalbilder
+THUMBNAIL_DIR = CONFIG['thumbnails']['thumbnail_dir']  # Thumbnails
+THUMBNAIL_SIZE = tuple(CONFIG['thumbnails']['thumbnail_size'])
+MAX_IMAGE_WIDTH = CONFIG['thumbnails']['max_image_width']
 
 # Beispiel: Labels / Scores (kann aus DB kommen)
 labels_scores = {

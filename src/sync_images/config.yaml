@@ -1,0 +1,6 @@
+# pcloud
+pcloud:
+  # path on pcloud drive to sync with local directory
+  remote_path: /Automatic Upload
+  # local path to sync with pcloud drive
+  local_path: /home/micmink/data/pcloud_sync

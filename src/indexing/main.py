@@ -13,20 +13,7 @@ from src.face_detection import FaceDetectorSCRFD
 
 from src.common_tools import load_config
 
-# Table schema für Tags
-# -------------------------------
-# GPS Location: TEXT
-# City: TEXT
-# Country: TEXT
-# Year: INTEGER
-# Month: INTEGER
-# Day: INTEGER
-# Peron_janine: BOOLEAN
-# Person_micmink: BOOLEAN
-# Person_other: BOOLEAN
-# Count_faces: INTEGER
-# ref_image_path: TEXT
-# ref_thumbnail_path: TEXT
+
 
 # read config
 CONFIG = load_config('config.yaml')
