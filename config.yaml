@@ -34,6 +34,12 @@ database:
   type: sqlite
   name: image_tagger_db.sqlite3
 
+# Embedding / Vector Search Configuration
+embedding:
+  model_name: Salesforce/blip2-opt-2.7b
+  vector_db_path: ./data/vector_db
+  batch_size: 4
+
 # Logging Configuration
 logging:
   level: INFO

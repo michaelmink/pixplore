@@ -8,3 +8,5 @@ insightface
 onnxruntime-gpu
 dotenv
 streamlit
+chromadb
+accelerate
