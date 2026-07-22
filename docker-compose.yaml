@@ -1,0 +1,23 @@
+services:
+  java-api:
+    build: ./src/sync_images/pcloud-java
+    ports:
+      - "8080:8080"
+    environment:
+      - PCLOUD_USERNAME=${PCLOUD_USERNAME}
+      - PCLOUD_PASSWORD=${PCLOUD_PASSWORD}
+      - PCLOUD_DOWNLOAD_PATH=/tmp/images
+    volumes:
+      - images:/tmp/images
+
+  frontend:
+    build: ./src/frontend
+    ports:
+      - "8501:8501"
+    volumes:
+      - images:/tmp/images
+    depends_on:
+      - java-api
+
+volumes:
+  images:
