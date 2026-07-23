@@ -1,0 +1,59 @@
+# Deployment: sorgt dafür, dass immer die gewünschte Anzahl Pods läuft
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: java-api
+  namespace: pixplore
+spec:
+  replicas: 1 # Anzahl Pods
+  selector:
+    matchLabels:
+      app: java-api # verwaltet Pods mit diesem Label
+  template:
+    metadata:
+      labels:
+        app: java-api # muss zum selector oben passen
+    spec:
+      containers:
+        - name: java-api
+          image: java-api
+          imagePullPolicy: Never # lokales Minikube-Image, nicht von Registry pullen
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PCLOUD_USERNAME
+              valueFrom:
+                secretKeyRef: # Wert kommt aus dem K8s Secret
+                  name: pcloud-credentials
+                  key: PCLOUD_USERNAME
+            - name: PCLOUD_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pcloud-credentials
+                  key: PCLOUD_PASSWORD
+            - name: PCLOUD_DOWNLOAD_PATH
+              value: /tmp/images
+          volumeMounts:
+            - name: images
+              mountPath: /tmp/images # im Container unter diesem Pfad verfügbar
+      volumes:
+        - name: images
+          #persistentVolumeClaim:
+          #  claimName: images-pvc # Referenz auf den PVC (persistente "Festplatte")
+          hostPath:
+            path: /tmp/images # im Minikube-Host unter diesem Pfad verfügbar
+            type: DirectoryOrCreate # falls nicht vorhanden, wird das Verzeichnis erstellt
+---
+# Service: macht den Pod von außen erreichbar (wie -p bei Docker)
+apiVersion: v1
+kind: Service
+metadata:
+  name: java-api
+  namespace: pixplore
+spec:
+  type: NodePort # auf einem Port des Nodes erreichbar (für Minikube)
+  selector:
+    app: java-api # leitet Traffic an Pods mit diesem Label weiter
+  ports:
+    - port: 8080 # Service-Port (innerhalb Cluster)
+      targetPort: 8080 # weiterleiten an diesen Container-Port

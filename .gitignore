@@ -9,3 +9,6 @@ venv/
 env/
 .env/
 .secrets
+
+# K8s secrets
+k8s/secret.yaml

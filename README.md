@@ -10,6 +10,8 @@ Framework that contains the following basic functionalities:
 * integrate blip2/qwen3-vl embeddings to enable query based search
 * local llm to leverage image search
 
+**Target Platform:** Docker Compose (lokal) → Minikube (lokal K8s) → GKE (Google Cloud)
+
 ## Architektur
 
 ```

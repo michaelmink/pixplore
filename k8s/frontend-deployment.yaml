@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: pixplore
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: frontend
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8501
+          volumeMounts:
+            - name: images
+              mountPath: /tmp/images
+      volumes:
+        - name: images
+          #persistentVolumeClaim:
+          #  claimName: images-pvc # Referenz auf den PVC (persistente "Festplatte")
+          hostPath:
+            path: /tmp/images # im Minikube-Host unter diesem Pfad verfügbar
+            type: DirectoryOrCreate # falls nicht vorhanden, wird das Verzeichnis erstellt
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: pixplore
+spec:
+  type: NodePort
+  selector:
+    app: frontend
+  ports:
+    - port: 8501
+      targetPort: 8501
