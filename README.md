@@ -18,13 +18,23 @@ Framework that contains the following basic functionalities:
 pixplore/
 ├── src/
 │   ├── frontend/          # Streamlit UI (Port 8501)
+│   ├── controller/        # Saga Orchestrator – überwacht /tmp/images, dispatcht an Worker
 │   ├── sync_images/
 │   │   ├── pcloud-java/   # Spring Boot API zum Sync mit pCloud (Port 8080)
 │   │   └── python/        # Python-basierter pCloud-Sync
-│   ├── indexing/           # Embedding, Face Detection, Vektorsuche
-│   └── vectordb/           # ChromaDB Vektor-Datenbank
+│   ├── indexing/
+│   │   └── create_tags/   # gRPC Worker – EXIF-Extraktion (Port 50051)
+│   └── vectordb/           # ChromaDB Vektor-Datenbank (Port 8000)
 ├── docker-compose.yaml
 └── config.yaml
+```
+
+### Datenfluss
+
+```
+pCloud → java-api → /tmp/images/*.jpg → Controller → Worker_Tags (gRPC) → ChromaDB
+                                                                                ↓
+                                                              Frontend (Streamlit) ← liest Metadaten + Bilder
 ```
 
 ## Services
@@ -33,6 +43,9 @@ pixplore/
 |---------|-------------|------|
 | **java-api** | Spring Boot API – Bilder aus pCloud via WebDAV listen/downloaden | 8080 |
 | **frontend** | Streamlit UI – Bilder anzeigen, filtern, durchsuchen | 8501 |
+| **chromadb** | ChromaDB Vektor-Datenbank (Docker) | 8000 |
+| **worker_tags** | gRPC Worker – extrahiert EXIF-Metadaten und schreibt in ChromaDB | 50051 |
+| **controller** | Saga Orchestrator – pollt /tmp/images und dispatcht an Worker | - |
 
 ## Schnellstart
 
