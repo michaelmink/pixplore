@@ -21,8 +21,6 @@ public class HelloController {
         this.listService = listService;
     }
     
-
-
     @GetMapping("/health")
     public String health() {
         return "Healthy";
@@ -37,6 +35,22 @@ public class HelloController {
 
         // print a message to the console indicating that the downloadBatch endpoint was called
         System.out.println("downloadFile endpoint called.");
+
+        return "Download successful.";
+    }
+
+    @GetMapping("/download_files")
+    public String downloadFiles(
+        @RequestParam(defaultValue = "/Automatic%20Upload/Samsung%20SM-M356B/") String path,
+        @RequestParam(required = true) Boolean trigger_download,
+        @RequestParam(defaultValue = "2026-01-01") LocalDate start_date,
+        @RequestParam(defaultValue = "2100-01-01") LocalDate end_date,
+        @RequestParam(required = false) String ignore_existing,
+        @RequestParam(defaultValue = "10") Integer limit) throws IOException {
+        // Call the downloadFiles method from the DownloadService class
+        downloadService.downloadFiles(path, trigger_download, start_date, end_date, ignore_existing, limit);
+        // print a message to the console indicating that the downloadFiles endpoint was called
+        System.out.println("downloadFiles endpoint called.");
 
         return "Download successful.";
     }

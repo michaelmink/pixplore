@@ -31,3 +31,18 @@ docker run -d -p 8501:8501 -v /tmp/images:/tmp/images frontend
 | `-v /tmp/images:/tmp/images` | Bilderverzeichnis vom Host in den Container einbinden |
 
 Die App ist dann erreichbar unter http://localhost:8501.
+
+## Artifact Registry (GCP)
+
+### Image taggen und pushen
+
+```bash
+docker build -t europe-west3-docker.pkg.dev/pixplore-503406/pixplore-registry/frontend:latest .
+docker push europe-west3-docker.pkg.dev/pixplore-503406/pixplore-registry/frontend:latest
+```
+
+### Auth (einmalig)
+
+```bash
+gcloud auth configure-docker europe-west3-docker.pkg.dev
+```

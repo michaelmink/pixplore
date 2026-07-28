@@ -8,16 +8,37 @@ services:
       - PCLOUD_PASSWORD=${PCLOUD_PASSWORD}
       - PCLOUD_DOWNLOAD_PATH=/tmp/images
     volumes:
-      - images:/tmp/images
+      - /tmp/images:/tmp/images
 
   frontend:
     build: ./src/frontend
     ports:
       - "8501:8501"
     volumes:
-      - images:/tmp/images
+      - /tmp/images:/tmp/images
+    environment:
+      - CHROMA_HOST=chromadb
     depends_on:
       - java-api
 
+  chromadb:
+    build: ./src/vectordb
+    ports:
+      - "8000:8000"
+    volumes:
+      - /tmp/images/vectordb:/data
+
+  worker_tags:
+    build: ./src/indexing/create_tags
+    ports:
+      - "50051:50051"
+    volumes:
+      - /tmp/images:/tmp/images
+    environment:
+      - CHROMA_HOST=chromadb
+    depends_on:
+      - chromadb
+
 volumes:
   images:
+  data:

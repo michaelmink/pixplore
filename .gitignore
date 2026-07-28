@@ -12,3 +12,5 @@ env/
 
 # K8s secrets
 k8s/secret.yaml
+tags.db
+src/vectordb/data/

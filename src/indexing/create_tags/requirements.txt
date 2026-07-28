@@ -1,0 +1,5 @@
+grpcio==1.66.1
+grpcio-tools==1.66.1
+aiosqlite==0.20.0
+Pillow
+chromadb

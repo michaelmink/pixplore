@@ -67,6 +67,69 @@ cd src/frontend
 streamlit run start_server.py
 ```
 
+## Minikube Deployment
+
+K8s-Manifeste liegen in `k8s/`. Nutzt `hostPath` für lokalen Dateizugriff.
+
+### Voraussetzungen
+
+- Minikube installiert und gestartet (`minikube start`)
+- `kubectl` installiert
+
+### 1. Images in Minikube bauen
+
+```bash
+eval $(minikube docker-env)
+docker build -t java-api ./src/sync_images/pcloud-java
+docker build -t frontend ./src/frontend
+```
+
+### 2. Secret anlegen
+
+`k8s/secret.yaml` ist in `.gitignore` — manuell erstellen:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pcloud-credentials
+  namespace: pixplore
+type: Opaque
+stringData:
+  PCLOUD_USERNAME: "deine@email.com"
+  PCLOUD_PASSWORD: "deinPasswort"
+```
+
+### 3. Host-Verzeichnis mounten
+
+```bash
+minikube mount /tmp/images:/tmp/images &
+```
+
+### 4. Deployen
+
+```bash
+kubectl apply -f k8s/
+```
+
+### 5. Port-Forwarding (von anderen Rechnern erreichbar)
+
+```bash
+kubectl port-forward svc/java-api 8080:8080 -n pixplore --address 0.0.0.0 &
+kubectl port-forward svc/frontend 8501:8501 -n pixplore --address 0.0.0.0 &
+```
+
+### Nützliche Befehle
+
+```bash
+kubectl get pods -n pixplore                      # Pod-Status
+kubectl logs -f deployment/java-api -n pixplore   # Logs
+kubectl exec -it deployment/java-api -n pixplore -- sh  # Shell im Container
+kubectl rollout restart deployment/java-api -n pixplore # Pod neustarten
+minikube service java-api -n pixplore --url       # Service-URL anzeigen
+kubectl delete -f k8s/                            # Alles aufräumen
+```
+
 ## Internet Facing
 
 Using [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) + [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/) for secure public access with authentication.
