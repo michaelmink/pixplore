@@ -57,10 +57,6 @@ class TagWorker(service_pb2_grpc.WorkerServiceServicer):
                 metadatas=[metadata],
                 documents=[image_file_name]
             )
-            
-            #client = chromadb.HttpClient(host="localhost", port=8000)
-            #col = client.get_collection("image_tags")
-            #print(col.get(include=["metadatas", "documents"]))
 
             return service_pb2.TaskResponse(status="COMPLETED", db_record_id="0")
 
@@ -80,22 +76,7 @@ async def main():
     server.add_insecure_port("[::]:50051")
     await server.start()
     logger.info("Server running on :50051")
-    
-    # needs to be commented for local testing
     await server.wait_for_termination()
-
-
-    if False:
-        # Client gegen den eigenen Server
-        channel = grpc.aio.insecure_channel("localhost:50051")
-        stub = service_pb2_grpc.WorkerServiceStub(channel)
-
-        # Beispieldaten
-        for i, img in enumerate(["/tmp/images/20260122_201018.jpg", "/tmp/images/20260122_201016.jpg", "/tmp/images/20260121_071024.jpg"]):
-            resp = await stub.ProcessTask(service_pb2.TaskRequest(task_id=str(i), img_path=img))            
-
-        await channel.close()
-        await server.stop(0)
 
 
 if __name__ == "__main__":

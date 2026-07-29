@@ -9,4 +9,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["streamlit", "run", "start_server.py"]
+RUN python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. service.proto
+
+EXPOSE 50052
+
+CMD ["python", "worker_thumbnails.py"]

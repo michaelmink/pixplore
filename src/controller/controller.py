@@ -3,6 +3,8 @@ import glob
 import logging
 import os
 import grpc
+import csv
+import aiohttp
 
 # Importiere die vom Dockerfile generierten Protobuf-Stubs
 import service_pb2
@@ -20,7 +22,8 @@ logger = logging.getLogger(__name__)
 
 # Die gRPC-Endpunkte der 3 Docker-Container (lokal gemappt via docker-compose)
 WORKERS = {
-    "Worker_Tags": "localhost:50051"
+    "Worker_Tags": "localhost:50051",
+    "Worker_Thumbnails": "localhost:50052",
 }
 
 async def execute_forward_step(worker_name: str, addr: str, req: service_pb2.TaskRequest):
@@ -58,17 +61,34 @@ async def execute_compensating_step(worker_name: str, addr: str, task_id: str, r
 async def run_saga_orchestrator(task_id: str, img_path: str):
     """
     Der zentrale Saga-Souverän. Er steuert Forward und Backward Recovery.
-    """    
-    # gRPC-Request-Objekt bauen
-    request = service_pb2.TaskRequest(task_id=task_id, img_path=img_path)
-    
+    """
     logger.info(f"===========================================================")
     logger.info(f"🚀 STARTE GLOBALEN SAGA-WORKFLOW (TX-ID: {task_id})")
     logger.info(f"===========================================================")
+
+    # download the image using java_api REST endpoint download_file
+    async with aiohttp.ClientSession() as session:
+        async with session.get("http://localhost:8080/download_file", params={"path": img_path}) as resp:
+            if resp.status != 200:
+                logger.error(f"❌ Download fehlgeschlagen für {img_path}: HTTP {resp.status}")
+                return
+            logger.info(f"⬇️ Download erfolgreich für {img_path}")
+
+    # TODO: Workaround!
+    img_path = os.path.join(WATCH_DIR, os.path.basename(img_path))
+
+    # check if file exists
+    if not os.path.exists(img_path):
+        logger.error(f"❌ Datei existiert nicht: {img_path}")
+        return
+
+    # gRPC-Request-Objekt bauen
+    request = service_pb2.TaskRequest(task_id=task_id, img_path=img_path)
     
     # Erstelle die 3 parallelen Coroutinen
     tasks = [
         execute_forward_step("Worker_Tags", WORKERS["Worker_Tags"], request),
+        execute_forward_step("Worker_Thumbnails", WORKERS["Worker_Thumbnails"], request),
     ]
     
     try:
@@ -76,6 +96,10 @@ async def run_saga_orchestrator(task_id: str, img_path: str):
         # return_exceptions=False sorgt für sofortigen Abbruch beim ersten Fehler!
         await asyncio.gather(*tasks, return_exceptions=False)
         logger.info("🎉 \033[1;32mGLOBALER ERFOLG!\033[0m Alle Microservices sind persistent konsistent.")
+
+        # Nach erfolgreicher Verarbeitung löschen
+        os.remove(img_path)
+        logger.info(f"🗑️ {img_path} gelöscht.")
         
     except Exception as e:
         # Gather-Phase im Fehlerfall: Backward Recovery wird eingeleitet
@@ -106,20 +130,32 @@ async def watch_and_process():
     logger.info(f"👀 Listener gestartet. Überwache {WATCH_DIR} (alle {POLL_INTERVAL}s)...")
 
     while True:
-        jpg_files = sorted(glob.glob(os.path.join(WATCH_DIR, "*.jpg")))
+        csv_list_file = os.path.join(WATCH_DIR, "list_files.csv")
 
-        if jpg_files:
-            logger.info(f"📂 {len(jpg_files)} JPG-Datei(en) gefunden.")
+        if os.path.exists(csv_list_file):
+            logger.info(f"📂 CSV-Datei gefunden: {csv_list_file}")
 
-        for i, img_path in enumerate(jpg_files):
-            task_id = os.path.basename(img_path)
-            try:
-                await run_saga_orchestrator(task_id, img_path)
-                # Nach erfolgreicher Verarbeitung löschen
-                #os.remove(img_path)
-                #logger.info(f"🗑️ {img_path} gelöscht.")
-            except Exception as e:
-                logger.error(f"Fehler bei {img_path}: {e}")
+            
+            with open(csv_list_file, newline='') as csvfile:
+                reader = csv.reader(csvfile)
+                for i, img_path in enumerate(reader):
+                    img_path = img_path[0]  # Extrahiere den Pfad aus der Zeile
+
+                    # only proceed if its a jpg file
+                    if not img_path.lower().endswith(('.jpg', '.jpeg')):
+                        logger.info(f"⚠️ Überspringe nicht-JPG-Datei: {img_path}")
+                        continue
+                    
+                    task_id = os.path.basename(img_path)
+                    try:
+                        await run_saga_orchestrator(task_id, img_path)
+                        
+                    except Exception as e:
+                        logger.error(f"Fehler bei {img_path}: {e}")
+
+            # remove the CSV file after processing
+            os.remove(csv_list_file)
+            logger.info(f"🗑️ CSV-Datei {csv_list_file} gelöscht.")
 
         await asyncio.sleep(POLL_INTERVAL)
 

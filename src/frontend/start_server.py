@@ -5,30 +5,31 @@ import os
 import math
 import yaml
 import chromadb
+import base64
 
 # -------------------------------
 # Konfiguration
 # -------------------------------
-# load config
-with open('config.yaml', "r") as f:
-    CONFIG = yaml.safe_load(f)
 
-RAW_DIR = CONFIG['pcloud']['local_path']       # Originalbilder
-THUMBNAIL_DIR = CONFIG['thumbnails']['thumbnail_dir']  # Thumbnails
-THUMBNAIL_SIZE = tuple(CONFIG['thumbnails']['thumbnail_size'])
-MAX_IMAGE_WIDTH = CONFIG['thumbnails']['max_image_width']
+# Base path
+BASE_PATH = os.getenv("BASE_PATH", "/tmp/images")
+CHROMA_PATH = os.path.join(BASE_PATH, "vectordb")
+THUMBNAIL_PATH = os.path.join(BASE_PATH, "thumbnails")
 
-# chromadb client (read-only, PersistentClient reicht)
-CHROMA_PATH = os.getenv("CHROMA_PATH", "/tmp/images/vectordb")
-client = chromadb.PersistentClient(path=CHROMA_PATH)
+# chromadb client
+@st.cache_resource(ttl=60)
+def get_chromadb_data():
+    client = chromadb.PersistentClient(path=CHROMA_PATH)
+    print(f"Using ChromaDB PersistentClient: {CHROMA_PATH}")
+    collection = client.get_collection("image_tags")
+    results = collection.get(include=["metadatas", "documents"])
+    print(f"Loaded {len(results['ids'])} images from ChromaDB collection 'image_tags'")
+    metadata = {}
+    for doc_id, meta in zip(results["ids"], results["metadatas"]):
+        metadata[doc_id] = meta
+    return metadata
 
-collection = client.get_collection("image_tags")
-results = collection.get(include=["metadatas", "documents"])
-
-# Build lookup: filename -> metadata
-image_metadata = {}
-for doc_id, meta in zip(results["ids"], results["metadatas"]):
-    image_metadata[doc_id] = meta
+image_metadata = get_chromadb_data()
 
 # Beispiel: Labels / Scores (kann aus DB kommen)
 labels_scores = {
@@ -41,6 +42,10 @@ st.set_page_config(
     layout="wide"
 )
 st.title("Pixplore - AI Image Explorer")
+
+if st.sidebar.button("🔄 Daten neu laden"):
+    st.cache_resource.clear()
+    st.rerun()
 
 # -------------------------------
 # LLM Filter Input
@@ -75,12 +80,16 @@ selected_model = st.sidebar.selectbox("Kamera", options=["Alle"] + models)
 # -------------------------------
 # Alle Bilder laden
 # -------------------------------
-all_image_files = [f for f in os.listdir(RAW_DIR) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+all_image_files = [f for f in os.listdir(THUMBNAIL_PATH) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
 
-# Filter anwenden
+# Filter anwenden — Thumbnail-Name zu Original-Name mappen für Metadaten-Lookup
+def thumb_to_original(thumb_name):
+    return thumb_name.replace("_thumb", "")
+
 image_files = []
 for f in all_image_files:
-    meta = image_metadata.get(f, {})
+    original_name = thumb_to_original(f)
+    meta = image_metadata.get(original_name, {})
     date_taken = meta.get("date_taken", "")
     model = meta.get("model", "")
 
@@ -92,37 +101,90 @@ for f in all_image_files:
         continue
     image_files.append(f)
 
-st.write(f"{len(image_files)} von {len(all_image_files)} Bildern (gefiltert)")
+# -------------------------------
+# Pagination
+# -------------------------------
+IMAGES_PER_PAGE = 30
+
+if "page" not in st.session_state:
+    st.session_state.page = 0
+
+total_pages = max(1, math.ceil(len(image_files) / IMAGES_PER_PAGE))
+st.session_state.page = min(st.session_state.page, total_pages - 1)
+
+start_idx = st.session_state.page * IMAGES_PER_PAGE
+end_idx = start_idx + IMAGES_PER_PAGE
+page_files = image_files[start_idx:end_idx]
+
+st.write(f"{len(image_files)} Bilder | Seite {st.session_state.page + 1} von {total_pages}")
 
 # -------------------------------
 # Dynamische Spaltenzahl
 # -------------------------------
 max_width_per_image = 150
-page_width = st.slider("Page width in px (approx)", min_value=600, max_value=1500, value=900)
-num_cols = max(1, page_width // max_width_per_image)
-st.write(f"Using {num_cols} columns")
+num_cols = 6
+
+# -------------------------------
+# Vergrößertes Bild anzeigen (wenn ausgewählt)
+# -------------------------------
+if "selected_image" not in st.session_state:
+    st.session_state.selected_image = None
+
+if st.session_state.selected_image:
+    filename = st.session_state.selected_image
+    path = os.path.join(THUMBNAIL_PATH, filename)
+    original_name = thumb_to_original(filename)
+    meta = image_metadata.get(original_name, {})
+
+    col_img, col_info = st.columns([3, 1])
+    with col_img:
+        st.image(Image.open(path), caption=original_name, use_container_width=True)
+    with col_info:
+        st.subheader("Metadaten")
+        for key, value in meta.items():
+            st.write(f"**{key}:** {value}")
+    if st.button("← Zurück zur Galerie"):
+        st.session_state.selected_image = None
+        st.rerun()
 
 # -------------------------------
 # Galerie mit Klick auf Thumbnail
 # -------------------------------
 cols = st.columns(num_cols)
 
-for idx, filename in enumerate(image_files):
-    path = os.path.join(RAW_DIR, filename)
-    thumb_img = Image.open(path)
-    thumb_img.thumbnail(THUMBNAIL_SIZE)
-
+for idx, filename in enumerate(page_files):
+    path = os.path.join(THUMBNAIL_PATH, filename)
     col = cols[idx % num_cols]
 
-    # Thumbnail als klickbarer Button
-    if col.button("", key=f"thumb_{idx}", help=f"Show full image: {filename}"):
-        # Vergrößertes Bild anzeigen
-        full_img = Image.open(path)
-        st.image(full_img, caption=filename, width=MAX_IMAGE_WIDTH)
+    with col:
+        with open(path, "rb") as f:
+            img_data = base64.b64encode(f.read()).decode()
+        st.markdown(
+            f"""<a href="?selected={filename}" target="_self">
+                <img src="data:image/jpeg;base64,{img_data}" style="width:100%; aspect-ratio:1; object-fit:cover; border-radius:4px; cursor:pointer; margin-bottom:8px;">
+            </a>""",
+            unsafe_allow_html=True,
+        )
 
-    # Thumbnail anzeigen
-    col.image(thumb_img, width=max_width_per_image, caption=filename)
-
-    # Neue Reihe, wenn Spalten voll
     if (idx + 1) % num_cols == 0:
         cols = st.columns(num_cols)
+
+# Handle click via query param
+params = st.query_params
+if "selected" in params:
+    st.session_state.selected_image = params["selected"]
+    st.query_params.clear()
+    st.rerun()
+
+# -------------------------------
+# Pagination Buttons
+# -------------------------------
+col_prev, col_info, col_next = st.columns([1, 2, 1])
+with col_prev:
+    if st.button("← Zurück", disabled=st.session_state.page == 0):
+        st.session_state.page -= 1
+        st.rerun()
+with col_next:
+    if st.button("Weiter →", disabled=st.session_state.page >= total_pages - 1):
+        st.session_state.page += 1
+        st.rerun()

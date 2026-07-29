@@ -17,7 +17,7 @@ services:
     volumes:
       - /tmp/images:/tmp/images
     environment:
-      - CHROMA_HOST=chromadb
+      - BASE_PATH=/tmp/images
     depends_on:
       - java-api
 
@@ -38,6 +38,24 @@ services:
       - CHROMA_HOST=chromadb
     depends_on:
       - chromadb
+
+  worker_thumbnails:
+    build: ./src/indexing/create_thumbnails
+    ports:
+      - "50052:50052"
+    volumes:
+      - /tmp/images:/tmp/images
+      - /tmp/images/thumbnails:/tmp/images/thumbnails
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    ports:
+      - "9090:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
 
 volumes:
   images:
