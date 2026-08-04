@@ -23,11 +23,11 @@ logger = logging.getLogger(__name__)
 CONCURRENCY = int(os.getenv("CONCURRENCY", "5"))
 sem = asyncio.Semaphore(CONCURRENCY)
 
-# Die gRPC-Endpunkte der Docker-Container (lokal gemappt via docker-compose)
+# Die gRPC-Endpunkte der Docker-Container
 WORKERS = {
-    "Worker_Tags": "localhost:50051",
-    "Worker_Thumbnails": "localhost:50052",
-    "Worker_Embeddings": "dns:///embedding-worker:50053",
+    "Worker_Tags": "worker_tags:50051",
+    "Worker_Thumbnails": "worker_thumbnails:50052",
+    "Worker_Embeddings": "dns:///worker_embeddings:50053",
 }
 
 async def execute_forward_step(worker_name: str, addr: str, req: service_pb2.TaskRequest):
@@ -72,7 +72,7 @@ async def run_saga_orchestrator(task_id: str, img_path: str):
 
     # download the image using java_api REST endpoint download_file
     async with aiohttp.ClientSession() as session:
-        async with session.get("http://localhost:8080/download_file", params={"path": img_path}) as resp:
+        async with session.get("http://java-api:8080/download_file", params={"path": img_path}) as resp:
             if resp.status != 200:
                 logger.error(f"❌ Download fehlgeschlagen für {img_path}: HTTP {resp.status}")
                 return

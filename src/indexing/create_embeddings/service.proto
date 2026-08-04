@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package saga_embeddings;
+package saga_tags;
 
 // Der gRPC-Service, den jeder der 3 Worker implementieren muss
 service WorkerService {

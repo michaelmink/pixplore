@@ -51,14 +51,25 @@ services:
     build: ./src/indexing/create_embeddings
     deploy:
       replicas: 5
-    ports:
-      - "50053:50053"
     volumes:
       - /tmp/images:/tmp/images
     environment:
       - CHROMA_HOST=chromadb
     depends_on:
       - chromadb
+
+  controller:
+    build: ./src/controller
+    volumes:
+      - /tmp/images:/tmp/images
+    environment:
+      - WATCH_DIR=/tmp/images
+      - CONCURRENCY=5
+    depends_on:
+      - java-api
+      - worker_tags
+      - worker_thumbnails
+      - worker_embeddings
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest

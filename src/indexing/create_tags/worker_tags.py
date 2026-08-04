@@ -58,7 +58,7 @@ class TagWorker(service_pb2_grpc.WorkerServiceServicer):
                 documents=[image_file_name]
             )
 
-            return service_pb2.TaskResponse(status="COMPLETED", db_record_id="0")
+            return service_pb2.TaskResponse(status="COMPLETED", db_record_id=image_file_name)
 
         except Exception as e:
             logger.error(f"Error reading EXIF data: {e}")
