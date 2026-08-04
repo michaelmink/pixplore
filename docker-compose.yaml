@@ -47,6 +47,19 @@ services:
       - /tmp/images:/tmp/images
       - /tmp/images/thumbnails:/tmp/images/thumbnails
 
+  worker_embeddings:
+    build: ./src/indexing/create_embeddings
+    deploy:
+      replicas: 5
+    ports:
+      - "50053:50053"
+    volumes:
+      - /tmp/images:/tmp/images
+    environment:
+      - CHROMA_HOST=chromadb
+    depends_on:
+      - chromadb
+
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
     ports:

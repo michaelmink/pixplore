@@ -6,15 +6,25 @@ import math
 import yaml
 import chromadb
 import base64
+import shutil
 
 # -------------------------------
 # Konfiguration
 # -------------------------------
 
-# Base path
+# Base path (GCS FUSE mount on Cloud Run, local dir otherwise)
 BASE_PATH = os.getenv("BASE_PATH", "/tmp/images")
-CHROMA_PATH = os.path.join(BASE_PATH, "vectordb")
 THUMBNAIL_PATH = os.path.join(BASE_PATH, "thumbnails")
+
+# SQLite doesn't work over GCS FUSE — copy vectordb to a local writable path if needed.
+_chroma_src = os.path.join(BASE_PATH, "vectordb")
+LOCAL_CHROMA_PATH = "/tmp/local_vectordb"
+if os.access(_chroma_src, os.W_OK):
+    CHROMA_PATH = _chroma_src
+else:
+    if not os.path.exists(LOCAL_CHROMA_PATH):
+        shutil.copytree(_chroma_src, LOCAL_CHROMA_PATH)
+    CHROMA_PATH = LOCAL_CHROMA_PATH
 
 # chromadb client
 @st.cache_resource(ttl=60)

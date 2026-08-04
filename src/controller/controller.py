@@ -20,10 +20,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Die gRPC-Endpunkte der 3 Docker-Container (lokal gemappt via docker-compose)
+CONCURRENCY = int(os.getenv("CONCURRENCY", "5"))
+sem = asyncio.Semaphore(CONCURRENCY)
+
+# Die gRPC-Endpunkte der Docker-Container (lokal gemappt via docker-compose)
 WORKERS = {
     "Worker_Tags": "localhost:50051",
     "Worker_Thumbnails": "localhost:50052",
+    "Worker_Embeddings": "dns:///embedding-worker:50053",
 }
 
 async def execute_forward_step(worker_name: str, addr: str, req: service_pb2.TaskRequest):
@@ -85,10 +89,11 @@ async def run_saga_orchestrator(task_id: str, img_path: str):
     # gRPC-Request-Objekt bauen
     request = service_pb2.TaskRequest(task_id=task_id, img_path=img_path)
     
-    # Erstelle die 3 parallelen Coroutinen
+    # Erstelle die parallelen Coroutinen
     tasks = [
         execute_forward_step("Worker_Tags", WORKERS["Worker_Tags"], request),
         execute_forward_step("Worker_Thumbnails", WORKERS["Worker_Thumbnails"], request),
+        execute_forward_step("Worker_Embeddings", WORKERS["Worker_Embeddings"], request),
     ]
     
     try:
@@ -135,25 +140,28 @@ async def watch_and_process():
         if os.path.exists(csv_list_file):
             logger.info(f"📂 CSV-Datei gefunden: {csv_list_file}")
 
-            
+            async def process_with_limit(task_id, img_path):
+                async with sem:
+                    await run_saga_orchestrator(task_id, img_path)
+
+            saga_tasks = []
             with open(csv_list_file, newline='') as csvfile:
                 reader = csv.reader(csvfile)
                 for i, img_path in enumerate(reader):
-                    img_path = img_path[0]  # Extrahiere den Pfad aus der Zeile
+                    img_path = img_path[0]
 
-                    # only proceed if its a jpg file
                     if not img_path.lower().endswith(('.jpg', '.jpeg')):
                         logger.info(f"⚠️ Überspringe nicht-JPG-Datei: {img_path}")
                         continue
                     
                     task_id = os.path.basename(img_path)
-                    try:
-                        await run_saga_orchestrator(task_id, img_path)
-                        
-                    except Exception as e:
-                        logger.error(f"Fehler bei {img_path}: {e}")
+                    saga_tasks.append(process_with_limit(task_id, img_path))
 
-            # remove the CSV file after processing
+            results = await asyncio.gather(*saga_tasks, return_exceptions=True)
+            for r in results:
+                if isinstance(r, Exception):
+                    logger.error(f"SAGA fehlgeschlagen: {r}")
+
             os.remove(csv_list_file)
             logger.info(f"🗑️ CSV-Datei {csv_list_file} gelöscht.")
 
