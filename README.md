@@ -19,22 +19,30 @@ pixplore/
 ├── src/
 │   ├── frontend/          # Streamlit UI (Port 8501)
 │   ├── controller/        # Saga Orchestrator – überwacht /tmp/images, dispatcht an Worker
+│   ├── text2vec/          # BLIP2 Text-Embedding Service (Port 8081)
 │   ├── sync_images/
 │   │   ├── pcloud-java/   # Spring Boot API zum Sync mit pCloud (Port 8080)
 │   │   └── python/        # Python-basierter pCloud-Sync
 │   ├── indexing/
-│   │   └── create_tags/   # gRPC Worker – EXIF-Extraktion (Port 50051)
-│   └── vectordb/           # ChromaDB Vektor-Datenbank (Port 8000)
+│   │   ├── create_tags/       # gRPC Worker – EXIF-Extraktion (Port 50051)
+│   │   ├── create_thumbnails/ # gRPC Worker – Thumbnail-Erzeugung (Port 50052)
+│   │   ├── create_embeddings/ # gRPC Worker – BLIP2 Bild-Embeddings → ChromaDB
+│   │   └── face_detection/    # Gesichtserkennung
+│   └── vectordb/          # ChromaDB Vektor-Datenbank (Port 8000)
 ├── docker-compose.yaml
-└── config.yaml
+└── k8s/                   # Kubernetes Manifeste
 ```
 
 ### Datenfluss
 
 ```
-pCloud → java-api → /tmp/images/*.jpg → Controller → Worker_Tags (gRPC) → ChromaDB
-                                                                                ↓
-                                                              Frontend (Streamlit) ← liest Metadaten + Bilder
+pCloud → java-api → /tmp/images/*.jpg → Controller ─┬→ Worker_Tags → ChromaDB (image_tags)
+                                                     ├→ Worker_Thumbnails → /tmp/images/thumbnails/
+                                                     └→ Worker_Embeddings → ChromaDB (image_embeddings)
+
+Frontend (Streamlit) ← liest Metadaten + Thumbnails + Embeddings aus ChromaDB
+    ↓
+Text-Suche → text2vec (BLIP2) → Embedding → ChromaDB Cosine Similarity → Ergebnisse
 ```
 
 ## Services
@@ -42,9 +50,12 @@ pCloud → java-api → /tmp/images/*.jpg → Controller → Worker_Tags (gRPC) 
 | Service | Beschreibung | Port |
 |---------|-------------|------|
 | **java-api** | Spring Boot API – Bilder aus pCloud via WebDAV listen/downloaden | 8080 |
-| **frontend** | Streamlit UI – Bilder anzeigen, filtern, durchsuchen | 8501 |
-| **chromadb** | ChromaDB Vektor-Datenbank (Docker) | 8000 |
-| **worker_tags** | gRPC Worker – extrahiert EXIF-Metadaten und schreibt in ChromaDB | 50051 |
+| **frontend** | Streamlit UI – Bilder anzeigen, filtern, Text-Suche | 8501 |
+| **text2vec** | FastAPI – BLIP2 Text-Embeddings für Similarity Search | 8081 |
+| **chromadb** | ChromaDB Vektor-Datenbank | 8000 |
+| **worker_tags** | gRPC Worker – extrahiert EXIF-Metadaten → ChromaDB | 50051 |
+| **worker_thumbnails** | gRPC Worker – erzeugt Thumbnails | 50052 |
+| **worker_embeddings** | gRPC Worker – BLIP2 Bild-Embeddings → ChromaDB | - |
 | **controller** | Saga Orchestrator – pollt /tmp/images und dispatcht an Worker | - |
 
 ## Schnellstart

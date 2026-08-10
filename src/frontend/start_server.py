@@ -114,10 +114,14 @@ with st.sidebar.form(key="search_form"):
     selected_model = st.selectbox("Kamera", options=["Alle"] + models)
     search_submitted = st.form_submit_button("🔍 Suchen")
 
-# Perform text similarity search if query is provided
-search_results = None
-if search_submitted and llm_input:
-    search_results = search_by_text(llm_input)
+# Persist search results in session state
+if search_submitted:
+    if llm_input:
+        st.session_state.search_results = search_by_text(llm_input)
+    else:
+        st.session_state.search_results = None
+
+search_results = st.session_state.get("search_results")
 
 # -------------------------------
 # Alle Bilder laden

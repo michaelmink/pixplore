@@ -3,15 +3,10 @@ import torch
 import numpy as np
 from typing import Optional
 from transformers import Blip2Processor, Blip2ForImageTextRetrieval
-import Pyro5.api
-
-# Marshal als Serializer aktivieren
-Pyro5.config.SERIALIZER = "marshal"
 
 logger = logging.getLogger(__name__)
 
 
-@Pyro5.api.expose
 class Blip2Embedder:
     """Generates image and text embeddings using BLIP2's retrieval model.
 

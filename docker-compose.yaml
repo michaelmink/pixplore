@@ -18,7 +18,7 @@ services:
       - /tmp/images:/tmp/images
     environment:
       - BASE_PATH=/tmp/images
-      - TEXT2VEC_URL=http://text2vec:8080
+      - TEXT2VEC_URL=http://text2vec:8081
     depends_on:
       - java-api
       - text2vec

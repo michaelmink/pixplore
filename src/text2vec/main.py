@@ -7,6 +7,11 @@ app = FastAPI()
 embedder = Blip2Embedder()
 
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
 class EmbedRequest(BaseModel):
     text: str
 

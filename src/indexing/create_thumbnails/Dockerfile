@@ -11,6 +11,8 @@ COPY . .
 
 RUN python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. service.proto
 
+USER 1000:1000
+
 EXPOSE 50052
 
 CMD ["python", "worker_thumbnails.py"]

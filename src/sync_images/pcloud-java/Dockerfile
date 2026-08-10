@@ -10,5 +10,8 @@ RUN chmod +x gradlew && ./gradlew :app:bootJar --no-daemon
 FROM eclipse-temurin:17-jre
 WORKDIR /app
 COPY --from=build /app/app/build/libs/*.jar app.jar
+
+USER 1000:1000
+
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
