@@ -46,5 +46,3 @@ logging:
   format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
   file: image_tagger.log
   console: true
-
-

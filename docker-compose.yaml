@@ -18,8 +18,10 @@ services:
       - /tmp/images:/tmp/images
     environment:
       - BASE_PATH=/tmp/images
+      - TEXT2VEC_URL=http://text2vec:8080
     depends_on:
       - java-api
+      - text2vec
 
   chromadb:
     build: ./src/vectordb
@@ -70,6 +72,11 @@ services:
       - worker_tags
       - worker_thumbnails
       - worker_embeddings
+
+  text2vec:
+    build: ./src/text2vec
+    ports:
+      - "8090:8081"
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest

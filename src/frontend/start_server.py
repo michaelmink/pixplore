@@ -3,10 +3,10 @@ import streamlit as st
 from PIL import Image
 import os
 import math
-import yaml
 import chromadb
 import base64
 import shutil
+import requests
 
 # -------------------------------
 # Konfiguration
@@ -15,6 +15,7 @@ import shutil
 # Base path (GCS FUSE mount on Cloud Run, local dir otherwise)
 BASE_PATH = os.getenv("BASE_PATH", "/tmp/images")
 THUMBNAIL_PATH = os.path.join(BASE_PATH, "thumbnails")
+TEXT2VEC_URL = os.getenv("TEXT2VEC_URL", "http://localhost:8081")
 
 # SQLite doesn't work over GCS FUSE — copy vectordb to a local writable path if needed.
 _chroma_src = os.path.join(BASE_PATH, "vectordb")
@@ -25,6 +26,7 @@ else:
     if not os.path.exists(LOCAL_CHROMA_PATH):
         shutil.copytree(_chroma_src, LOCAL_CHROMA_PATH)
     CHROMA_PATH = LOCAL_CHROMA_PATH
+
 
 # chromadb client
 @st.cache_resource(ttl=60)
@@ -39,7 +41,36 @@ def get_chromadb_data():
         metadata[doc_id] = meta
     return metadata
 
+
 image_metadata = get_chromadb_data()
+
+
+@st.cache_resource(ttl=60)
+def get_embedding_collection():
+    client = chromadb.PersistentClient(path=CHROMA_PATH)
+    return client.get_collection("image_embeddings")
+
+
+def search_by_text(query: str, n_results: int = 50):
+    """Get text embedding from text2vec service and query ChromaDB for similar images."""
+    try:
+        resp = requests.post(
+            f"{TEXT2VEC_URL}/embed_text", json={"text": query}, timeout=30
+        )
+        resp.raise_for_status()
+        text_embedding = resp.json()["embedding"]
+
+        collection = get_embedding_collection()
+        results = collection.query(
+            query_embeddings=[text_embedding],
+            n_results=n_results,
+            include=["distances"],
+        )
+        return list(zip(results["ids"][0], results["distances"][0]))
+    except Exception as e:
+        st.error(f"Text-Suche fehlgeschlagen: {e}")
+        return None
+
 
 # Beispiel: Labels / Scores (kann aus DB kommen)
 labels_scores = {
@@ -47,10 +78,7 @@ labels_scores = {
     "face_002.jpg": ("Person B", 0.88),
 }
 
-st.set_page_config(
-    page_title="Pixplore",
-    layout="wide"
-)
+st.set_page_config(page_title="Pixplore", layout="wide")
 st.title("Pixplore - AI Image Explorer")
 
 if st.sidebar.button("🔄 Daten neu laden"):
@@ -58,43 +86,58 @@ if st.sidebar.button("🔄 Daten neu laden"):
     st.rerun()
 
 # -------------------------------
-# LLM Filter Input
-# -------------------------------
-#llm_input = st.text_input("Search images (e.g., 'Person A outdoors smiling')")
-llm_input = st.sidebar.text_input("Search images (e.g., 'Person A outdoors smiling')")
-
-# -------------------------------
-# Harte Filter Dropdowns
+# Filter & Suche
 # -------------------------------
 # Jahre und Modelle aus ChromaDB-Metadaten extrahieren
-years = sorted(set(
-    meta.get("date_taken", "")[:4]
-    for meta in image_metadata.values()
-    if meta.get("date_taken")
-))
-months = sorted(set(
-    meta.get("date_taken", "")[:7].replace(":", "-")
-    for meta in image_metadata.values()
-    if meta.get("date_taken")
-))
-models = sorted(set(
-    meta.get("model", "")
-    for meta in image_metadata.values()
-    if meta.get("model")
-))
+years = sorted(
+    set(
+        meta.get("date_taken", "")[:4]
+        for meta in image_metadata.values()
+        if meta.get("date_taken")
+    )
+)
+months = sorted(
+    set(
+        meta.get("date_taken", "")[:7].replace(":", "-")
+        for meta in image_metadata.values()
+        if meta.get("date_taken")
+    )
+)
+models = sorted(
+    set(meta.get("model", "") for meta in image_metadata.values() if meta.get("model"))
+)
 
-selected_year = st.sidebar.selectbox("Jahr", options=["Alle"] + years)
-selected_month = st.sidebar.selectbox("Monat", options=["Alle"] + months)
-selected_model = st.sidebar.selectbox("Kamera", options=["Alle"] + models)
+with st.sidebar.form(key="search_form"):
+    llm_input = st.text_input("Search images (e.g., 'A sunset over mountains')")
+    selected_year = st.selectbox("Jahr", options=["Alle"] + years)
+    selected_month = st.selectbox("Monat", options=["Alle"] + months)
+    selected_model = st.selectbox("Kamera", options=["Alle"] + models)
+    search_submitted = st.form_submit_button("🔍 Suchen")
+
+# Perform text similarity search if query is provided
+search_results = None
+if search_submitted and llm_input:
+    search_results = search_by_text(llm_input)
 
 # -------------------------------
 # Alle Bilder laden
 # -------------------------------
-all_image_files = [f for f in os.listdir(THUMBNAIL_PATH) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+all_image_files = [
+    f
+    for f in os.listdir(THUMBNAIL_PATH)
+    if f.lower().endswith((".png", ".jpg", ".jpeg"))
+]
+
+# Build set of matching filenames from text search (ranked by similarity)
+search_ranked_names = None
+if search_results:
+    search_ranked_names = {name: dist for name, dist in search_results}
+
 
 # Filter anwenden — Thumbnail-Name zu Original-Name mappen für Metadaten-Lookup
 def thumb_to_original(thumb_name):
     return thumb_name.replace("_thumb", "")
+
 
 image_files = []
 for f in all_image_files:
@@ -103,13 +146,25 @@ for f in all_image_files:
     date_taken = meta.get("date_taken", "")
     model = meta.get("model", "")
 
+    # Text search filter: only show images that matched
+    if search_ranked_names is not None and original_name not in search_ranked_names:
+        continue
+
     if selected_year != "Alle" and not date_taken.startswith(selected_year):
         continue
-    if selected_month != "Alle" and not date_taken[:7].replace(":", "-").startswith(selected_month):
+    if selected_month != "Alle" and not date_taken[:7].replace(":", "-").startswith(
+        selected_month
+    ):
         continue
     if selected_model != "Alle" and model != selected_model:
         continue
     image_files.append(f)
+
+# Sort by similarity score when text search is active
+if search_ranked_names is not None:
+    image_files.sort(
+        key=lambda f: search_ranked_names.get(thumb_to_original(f), float("inf"))
+    )
 
 # -------------------------------
 # Pagination
@@ -126,7 +181,9 @@ start_idx = st.session_state.page * IMAGES_PER_PAGE
 end_idx = start_idx + IMAGES_PER_PAGE
 page_files = image_files[start_idx:end_idx]
 
-st.write(f"{len(image_files)} Bilder | Seite {st.session_state.page + 1} von {total_pages}")
+st.write(
+    f"{len(image_files)} Bilder | Seite {st.session_state.page + 1} von {total_pages}"
+)
 
 # -------------------------------
 # Dynamische Spaltenzahl
