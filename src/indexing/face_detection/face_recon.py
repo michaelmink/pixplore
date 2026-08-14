@@ -7,10 +7,10 @@ from torchvision.transforms import ToPILImage
 import torchvision.transforms.functional as TF
 
 # ---------------- CONFIG ----------------
-RAW_DIR = "raw"         # z.B. raw/me, raw/other
-OUT_DIR = "dataset"     # z.B. dataset/me, dataset/other
-IMAGE_SIZE = 224 # 112
-MARGIN = 100 # 20
+RAW_DIR = "raw"  # z.B. raw/me, raw/other
+OUT_DIR = "dataset"  # z.B. dataset/me, dataset/other
+IMAGE_SIZE = 224  # 112
+MARGIN = 100  # 20
 # ----------------------------------------
 
 # Gerät: CUDA, falls verfügbar
@@ -21,9 +21,9 @@ print(f"🔧 Using device: {DEVICE}")
 mtcnn = MTCNN(
     image_size=IMAGE_SIZE,
     margin=MARGIN,
-    keep_all=True,       # nur größtes Gesicht pro Bild
+    keep_all=True,  # nur größtes Gesicht pro Bild
     device=DEVICE,
-    post_process=True
+    post_process=True,
 )
 
 # Ausgabeordner erstellen
@@ -50,9 +50,8 @@ for label in os.listdir(RAW_DIR):
         # Bild öffnen
         try:
             img = Image.open(img_path).convert("RGB")
-        except:
+        except (OSError, ValueError):
             print(f"⚠️ Cannot open {img_path}, skipping")
-            continue
 
         # Gesicht erkennen & Crop
         faces, probs = mtcnn(img, return_prob=True)
@@ -61,7 +60,7 @@ for label in os.listdir(RAW_DIR):
         if faces is None:
             print("Keine Gesichter erkannt")
             continue
-        
+
         # falls nur 1 Gesicht, faces ist Tensor [3,H,W], machen wir Liste
         if isinstance(faces, torch.Tensor) and faces.ndim == 3:
             faces = [faces]
@@ -74,7 +73,7 @@ for label in os.listdir(RAW_DIR):
 
         # alle Gesichter speichern
         for face, prob, box in zip(faces, probs, boxes):
-            #print(f"found face {idx} with prob {prob}.")
+            # print(f"found face {idx} with prob {prob}.")
 
             # for debugging: plot box in raw image
             x1, y1, x2, y2 = map(int, box)
@@ -92,9 +91,11 @@ for label in os.listdir(RAW_DIR):
 
             # 5. Optional: leichtes Brightness/Contrast
             enhancer = ImageEnhance.Brightness(face_pil)
-            face_pil = enhancer.enhance(1.0)  # 1.0 = Original, >1 = heller, <1 = dunkler
+            face_pil = enhancer.enhance(
+                1.0
+            )  # 1.0 = Original, >1 = heller, <1 = dunkler
 
-            #face_pil = to_pil(face.cpu())
+            # face_pil = to_pil(face.cpu())
             out_name = f"{label}_{idx:04d}.jpg"
             face_pil.save(os.path.join(label_out, out_name))
             idx += 1
@@ -105,4 +106,3 @@ for label in os.listdir(RAW_DIR):
     print(f"✅ {idx} faces saved for '{label}'")
 
 # docker run -it --rm -v .:/app --gpus all face_recon /bin/bash
-

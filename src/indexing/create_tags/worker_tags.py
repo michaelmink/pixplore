@@ -4,7 +4,6 @@ import logging
 import grpc
 from PIL import Image
 from PIL.ExifTags import TAGS
-from datetime import datetime
 import chromadb
 
 import service_pb2
@@ -16,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 
 class TagWorker(service_pb2_grpc.WorkerServiceServicer):
-
     def __init__(self):
         # chromadb connection
         CHROMA_HOST = os.getenv("CHROMA_HOST", "localhost")
@@ -44,26 +42,25 @@ class TagWorker(service_pb2_grpc.WorkerServiceServicer):
                     tag_name = TAGS.get(tag_id, tag_id)
                     tags[tag_name] = value
                     if tag_name == "DateTimeOriginal":
-                        metadata['date_taken'] = value
+                        metadata["date_taken"] = value
                     if tag_name == "Model":
-                        metadata['model'] = value
+                        metadata["model"] = value
                     if tag_name == "GPSInfo":
-                        metadata['gps_lat'] = "0"
-                        metadata['gps_lon'] = "0"
+                        metadata["gps_lat"] = "0"
+                        metadata["gps_lon"] = "0"
 
             # write to db
             self.collection.add(
-                ids=[image_file_name],
-                metadatas=[metadata],
-                documents=[image_file_name]
+                ids=[image_file_name], metadatas=[metadata], documents=[image_file_name]
             )
 
-            return service_pb2.TaskResponse(status="COMPLETED", db_record_id=image_file_name)
+            return service_pb2.TaskResponse(
+                status="COMPLETED", db_record_id=image_file_name
+            )
 
         except Exception as e:
             logger.error(f"Error reading EXIF data: {e}")
             return service_pb2.TaskResponse(status="FAILED", db_record_id="")
-        
 
     async def CompensateTask(self, request, context):
         logger.info(f"Compensate: {request.task_id}")

@@ -51,11 +51,35 @@ def get_embedding_collection():
     return client.get_collection("image_embeddings")
 
 
+def _get_id_token(audience: str) -> str | None:
+    """Fetch ID token from GCP metadata server (only works on Cloud Run)."""
+    try:
+        token_resp = requests.get(
+            "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity",
+            params={"audience": audience},
+            headers={"Metadata-Flavor": "Google"},
+            timeout=2,
+        )
+        if token_resp.status_code == 200:
+            return token_resp.text
+    except Exception:
+        pass
+    return None
+
+
 def search_by_text(query: str, n_results: int = 50):
     """Get text embedding from text2vec service and query ChromaDB for similar images."""
     try:
+        headers = {"Content-Type": "application/json"}
+        token = _get_id_token(TEXT2VEC_URL)
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
         resp = requests.post(
-            f"{TEXT2VEC_URL}/embed_text", json={"text": query}, timeout=30
+            f"{TEXT2VEC_URL}/embed_text",
+            json={"text": query},
+            headers=headers,
+            timeout=30,
         )
         resp.raise_for_status()
         text_embedding = resp.json()["embedding"]

@@ -14,13 +14,11 @@ logger = logging.getLogger(__name__)
 
 
 class EmbeddingWorker(service_pb2_grpc.WorkerServiceServicer):
-
     def __init__(self):
         CHROMA_HOST = os.getenv("CHROMA_HOST", "localhost")
         client = chromadb.HttpClient(host=CHROMA_HOST, port=8000)
         self.collection = client.get_or_create_collection(
-            "image_embeddings",
-            metadata={"hnsw:space": "cosine"}
+            "image_embeddings", metadata={"hnsw:space": "cosine"}
         )
         self.embedder = Blip2Embedder()
 
@@ -39,18 +37,22 @@ class EmbeddingWorker(service_pb2_grpc.WorkerServiceServicer):
             existing = self.collection.get(ids=[image_file_name])
             if existing and existing["ids"]:
                 logger.info(f"Already exists: {image_file_name}")
-                return service_pb2.TaskResponse(status="ALREADY_EXISTS", db_record_id=image_file_name)
+                return service_pb2.TaskResponse(
+                    status="ALREADY_EXISTS", db_record_id=image_file_name
+                )
 
             embedding = self.embedder.embed_image(image)
 
             self.collection.add(
                 ids=[image_file_name],
                 embeddings=[embedding.tolist()],
-                documents=[image_file_name]
+                documents=[image_file_name],
             )
 
             logger.info(f"Stored embedding for {image_file_name}")
-            return service_pb2.TaskResponse(status="COMPLETED", db_record_id=image_file_name)
+            return service_pb2.TaskResponse(
+                status="COMPLETED", db_record_id=image_file_name
+            )
 
         except Exception as e:
             logger.error(f"Error processing image: {e}")

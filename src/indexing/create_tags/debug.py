@@ -1,8 +1,8 @@
 import asyncio
 import service_pb2
-import service_pb2_grpc
 from worker_tags import SqliteSagaWorker
 from unittest.mock import MagicMock
+
 
 async def test():
     worker = SqliteSagaWorker("TestWorker", ":memory:")  # In-Memory DB
@@ -21,8 +21,11 @@ async def test():
     print(f"Duplikat: {resp2.status}")
 
     # Kompensation testen
-    comp_req = service_pb2.CompensateRequest(task_id="test-1", db_record_id="rec_TestWorker_test-1")
+    comp_req = service_pb2.CompensateRequest(
+        task_id="test-1", db_record_id="rec_TestWorker_test-1"
+    )
     resp3 = await worker.CompensateTask(comp_req, ctx)
     print(f"Compensate: {resp3.status}")
+
 
 asyncio.run(test())
