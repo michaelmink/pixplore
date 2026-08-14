@@ -1,0 +1,6 @@
+name: pixplore-k8s
+runtime:
+  name: python
+  options:
+    virtualenv: venv
+description: Pixplore GKE Kubernetes deployment

@@ -14,3 +14,7 @@ env/
 k8s/secret.yaml
 tags.db
 src/vectordb/data/
+
+# Pulumi generated
+*.dot
+*.png

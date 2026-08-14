@@ -1,0 +1,6 @@
+encryptionsalt: v1:ZlgJUx/3JGE=:v1:pFoJMc0i9uigyuil:H6tcsZQkDgFCULGg8n2JnC9snr+Q9g==
+config:
+  gcp:project: pixplore-503406
+  gcp:region: europe-west3
+  pixplore-k8s:bucket-name: pixplore-bucket
+  pixplore-k8s:cluster-name: pixplore-cluster

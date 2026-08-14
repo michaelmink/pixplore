@@ -1,0 +1,6 @@
+name: pixplore-local
+runtime:
+  name: python
+  options:
+    virtualenv: venv
+description: Pixplore local development stack
