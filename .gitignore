@@ -2,19 +2,39 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
+*.pyo
 
 # Virtual environments
 venv/
 .venv/
 env/
+.env
 .env/
 .secrets
+
+# IDE
+.idea/
+*.iml
+.vscode/
 
 # K8s secrets
 k8s/secret.yaml
 tags.db
 src/vectordb/data/
 
-# Pulumi generated
+# Pulumi
 *.dot
 *.png
+pulumi/local/venv/
+pulumi/cloud_k8s/venv/
+
+# Java build artifacts
+src/sync_images/pcloud-java/app/build/
+src/sync_images/pcloud-java/.gradle/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker volumes
+/data/vector_db/

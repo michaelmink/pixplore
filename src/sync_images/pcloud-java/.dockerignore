@@ -1,0 +1,8 @@
+.git/
+.gitignore
+*.md
+.gradle/
+app/build/
+app/bin/
+.env
+.dockerignore
