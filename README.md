@@ -1,98 +1,148 @@
-# pixplore
+<p align="center">
+  <img src="misc/pixplore_logo.jfif" alt="Pixplore Logo" width="200">
+</p>
 
-Pixplore - AI Image Explorer
+<h1 align="center">pixplore</h1>
 
-Framework that contains the following basic functionalities:
-* sync images from cloud service provider (here: pCloud via WebDAV)
-* training pipeline to finetune face recognition to family members
-* pipeline to index images
-* server to visualize / filter thumbnails
-* integrate blip2/qwen3-vl embeddings to enable query based search
-* local llm to leverage image search
+<p align="center">
+  <strong>AI-powered Image Explorer</strong><br>
+  <em>Search your photo library with natural language. Powered by BLIP2 embeddings, gRPC microservices, and a Saga orchestrator.</em>
+</p>
 
-**Target Platform:** Docker Compose (lokal) → Minikube (lokal K8s) → GKE (Google Cloud)
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.11-blue?logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/java-21-orange?logo=openjdk&logoColor=white" alt="Java">
+  <img src="https://img.shields.io/badge/docker-compose%20%7C%20pulumi-2496ED?logo=docker&logoColor=white" alt="Docker">
+  <img src="https://img.shields.io/badge/k8s-GKE-326CE5?logo=kubernetes&logoColor=white" alt="Kubernetes">
+  <img src="https://img.shields.io/badge/observability-OpenTelemetry-7B61FF?logo=opentelemetry&logoColor=white" alt="OTel">
+</p>
 
-## Architektur
+---
+
+## What it does
+
+| Feature | Description |
+|---------|-------------|
+| ☁️ **Cloud Sync** | Pulls images from pCloud via WebDAV (Spring Boot) |
+| 🏷️ **Auto-Tagging** | Extracts EXIF metadata, GPS, dates, faces |
+| 🖼️ **Thumbnails** | Generates optimized previews on ingest |
+| 🧠 **Embeddings** | BLIP2 image+text embeddings stored in ChromaDB |
+| 🔍 **Semantic Search** | "sunset at the beach" → finds matching photos |
+| 👤 **Face Recognition** | Finetuned model detects family members |
+| 📊 **Observability** | Distributed tracing (Jaeger) + metrics (Prometheus) via OTel |
+
+**Target Platform:** Docker Compose → Pulumi (lokal) → GKE (Google Cloud)
+
+## Architecture
+
+```mermaid
+graph LR
+    subgraph Cloud
+        PC[☁️ pCloud]
+    end
+
+    subgraph Ingest
+        API[java-api :8080]
+        CTRL[controller]
+    end
+
+    subgraph Workers
+        WT[worker_tags :50051]
+        WTH[worker_thumbnails :50052]
+        WE[worker_embeddings]
+    end
+
+    subgraph Storage
+        FS[/tmp/images/]
+        DB[(ChromaDB :8000)]
+    end
+
+    subgraph Search & UI
+        FE[frontend :8501]
+        T2V[text2vec :8090]
+    end
+
+    subgraph Observability
+        OTEL[otel-collector :4317]
+        JAE[jaeger :16686]
+        PROM[prometheus :9090]
+    end
+
+    PC -->|WebDAV| API
+    API -->|download| FS
+    CTRL -->|watches| FS
+    CTRL -->|gRPC| WT & WTH & WE
+    WT -->|metadata| DB
+    WE -->|embeddings| DB
+    WTH -->|thumbnails| FS
+    FE -->|query| DB
+    FE -->|embed text| T2V
+    T2V -->|vector| DB
+
+    API & CTRL & T2V -.->|OTLP| OTEL
+    OTEL -.-> JAE & PROM
+```
+
+### Data Flow
 
 ```
-pixplore/
-├── src/
-│   ├── frontend/          # Streamlit UI (Port 8501)
-│   ├── controller/        # Saga Orchestrator – überwacht /tmp/images, dispatcht an Worker
-│   ├── text2vec/          # BLIP2 Text-Embedding Service (Port 8081)
-│   ├── sync_images/
-│   │   ├── pcloud-java/   # Spring Boot API zum Sync mit pCloud (Port 8080)
-│   │   └── python/        # Python-basierter pCloud-Sync
-│   ├── indexing/
-│   │   ├── create_tags/       # gRPC Worker – EXIF-Extraktion (Port 50051)
-│   │   ├── create_thumbnails/ # gRPC Worker – Thumbnail-Erzeugung (Port 50052)
-│   │   ├── create_embeddings/ # gRPC Worker – BLIP2 Bild-Embeddings → ChromaDB
-│   │   └── face_detection/    # Gesichtserkennung
-│   └── vectordb/          # ChromaDB Vektor-Datenbank (Port 8000)
-├── docker-compose.yaml
-└── k8s/                   # Kubernetes Manifeste
-```
+pCloud → java-api → /tmp/images/*.jpg → Controller ─┬→ Worker_Tags → ChromaDB (metadata)
+                                                     ├→ Worker_Thumbnails → /thumbnails/
+                                                     └→ Worker_Embeddings → ChromaDB (vectors)
 
-### Datenfluss
-
-```
-pCloud → java-api → /tmp/images/*.jpg → Controller ─┬→ Worker_Tags → ChromaDB (image_tags)
-                                                     ├→ Worker_Thumbnails → /tmp/images/thumbnails/
-                                                     └→ Worker_Embeddings → ChromaDB (image_embeddings)
-
-Frontend (Streamlit) ← liest Metadaten + Thumbnails + Embeddings aus ChromaDB
-    ↓
-Text-Suche → text2vec (BLIP2) → Embedding → ChromaDB Cosine Similarity → Ergebnisse
+Frontend → text2vec (BLIP2) → Embedding → ChromaDB Cosine Similarity → Results
 ```
 
 ## Services
 
-| Service | Beschreibung | Port |
-|---------|-------------|------|
-| **java-api** | Spring Boot API – Bilder aus pCloud via WebDAV listen/downloaden | 8080 |
-| **frontend** | Streamlit UI – Bilder anzeigen, filtern, Text-Suche | 8501 |
-| **text2vec** | FastAPI – BLIP2 Text-Embeddings für Similarity Search | 8081 |
-| **chromadb** | ChromaDB Vektor-Datenbank | 8000 |
-| **worker_tags** | gRPC Worker – extrahiert EXIF-Metadaten → ChromaDB | 50051 |
-| **worker_thumbnails** | gRPC Worker – erzeugt Thumbnails | 50052 |
-| **worker_embeddings** | gRPC Worker – BLIP2 Bild-Embeddings → ChromaDB | - |
-| **controller** | Saga Orchestrator – pollt /tmp/images und dispatcht an Worker | - |
-| **otel-collector** | OpenTelemetry Collector – empfängt Traces/Metrics, leitet weiter | 4317/4318 |
-| **jaeger** | Distributed Tracing UI | 16686 |
-| **prometheus** | Metrics-Scraping und -Abfrage | 9090 |
+| Service | Port | Description |
+|---------|------|-------------|
+| `java-api` | 8080 | Spring Boot — syncs images from pCloud via WebDAV |
+| `frontend` | 8501 | Streamlit UI — browse, filter, semantic search |
+| `text2vec` | 8090 | FastAPI — BLIP2 text embeddings |
+| `chromadb` | 8000 | Vector database (metadata + embeddings) |
+| `worker_tags` | 50051 | gRPC — EXIF extraction → ChromaDB |
+| `worker_thumbnails` | 50052 | gRPC — thumbnail generation |
+| `worker_embeddings` | — | gRPC — BLIP2 image embeddings → ChromaDB |
+| `controller` | — | Saga orchestrator — dispatches to workers |
+| `otel-collector` | 4317/4318 | OpenTelemetry Collector (OTLP) |
+| `jaeger` | 16686 | Distributed tracing UI |
+| `prometheus` | 9090 | Metrics scraping & queries |
 
-## Schnellstart
+## Quickstart
 
-### 1. `.env`-Datei erstellen
-
-```env
-PCLOUD_USERNAME=deine@email.com
-PCLOUD_PASSWORD=deinPasswort
-```
-
-### 2. Starten mit Docker Compose
+### Option A: Docker Compose
 
 ```bash
+# 1. Configure credentials
+cat > .env <<EOF
+PCLOUD_USERNAME=your@email.com
+PCLOUD_PASSWORD=your-password
+EOF
+
+# 2. Launch
 docker compose up --build
 ```
 
-Frontend: http://localhost:8501
-API: http://localhost:8080
-Swagger UI: http://localhost:8080/swagger-ui.html
+### Option B: Pulumi (recommended)
 
-### Einzelne Services lokal starten
-
-**Java-API:**
 ```bash
-cd src/sync_images/pcloud-java
-./gradlew bootRun
+cd pulumi/local
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+pulumi login --local
+pulumi stack init dev
+pulumi up
 ```
 
-**Frontend:**
-```bash
-cd src/frontend
-streamlit run start_server.py
-```
+### Access
+
+| | URL |
+|-|-----|
+| 🖼️ Frontend | http://localhost:8501 |
+| 📡 API (Swagger) | http://localhost:8080/swagger-ui.html |
+| 🔍 Jaeger Traces | http://localhost:16686 |
+| 📊 Prometheus | http://localhost:9090 |
 
 ## Minikube Deployment
 
