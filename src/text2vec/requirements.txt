@@ -5,3 +5,5 @@ numpy
 Pillow
 fastapi
 uvicorn
+opentelemetry-distro
+opentelemetry-exporter-otlp

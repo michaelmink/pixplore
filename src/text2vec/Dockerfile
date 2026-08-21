@@ -11,4 +11,5 @@ COPY . .
 
 EXPOSE 8081
 
-CMD ["python", "main.py"]
+RUN opentelemetry-bootstrap -a install
+CMD ["opentelemetry-instrument", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8081"]

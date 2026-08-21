@@ -57,6 +57,9 @@ Text-Suche → text2vec (BLIP2) → Embedding → ChromaDB Cosine Similarity →
 | **worker_thumbnails** | gRPC Worker – erzeugt Thumbnails | 50052 |
 | **worker_embeddings** | gRPC Worker – BLIP2 Bild-Embeddings → ChromaDB | - |
 | **controller** | Saga Orchestrator – pollt /tmp/images und dispatcht an Worker | - |
+| **otel-collector** | OpenTelemetry Collector – empfängt Traces/Metrics, leitet weiter | 4317/4318 |
+| **jaeger** | Distributed Tracing UI | 16686 |
+| **prometheus** | Metrics-Scraping und -Abfrage | 9090 |
 
 ## Schnellstart
 

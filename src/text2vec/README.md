@@ -51,3 +51,7 @@ import requests
 resp = requests.post("http://localhost:8081/embed_text", json={"text": "A sunset over mountains"})
 embedding = resp.json()["embedding"]  # list of 256 floats
 ```
+
+## Observability
+
+OpenTelemetry Auto-Instrumentation ist aktiv. Der Service sendet Traces und Metrics an den OTel Collector (konfiguriert via `OTEL_EXPORTER_OTLP_ENDPOINT`).

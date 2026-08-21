@@ -78,6 +78,22 @@ pulumi stack output
 | worker_thumbnails | 50052 | gRPC: Thumbnail-Erzeugung |
 | worker_embeddings | — | gRPC: Bild-Embeddings → ChromaDB |
 | controller | — | Orchestriert Worker bei neuen Bildern |
+| otel-collector | 4317/4318 | OpenTelemetry Collector (OTLP gRPC + HTTP) |
+| jaeger | 16686 | Distributed Tracing UI |
+| prometheus | 9090 | Metrics (scrapes OTel Collector :8889) |
+
+## Observability
+
+Services senden Traces/Metrics via OTel Auto-Instrumentation an den Collector:
+
+```
+Service (OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317)
+    → OTel Collector
+        ├── Traces → Jaeger (http://localhost:16686)
+        └── Metrics → Prometheus scrapes :8889 (http://localhost:9090)
+```
+
+Konfiguration: `otel-collector-config.yaml`, `prometheus.yml`
 
 ## Dateistruktur
 
@@ -94,7 +110,10 @@ pulumi/local/
     ├── chromadb.py       # VectorDB
     ├── text2vec.py       # Embedding-Modell
     ├── worker.py         # Tags + Thumbnails + Embeddings
-    └── controller.py     # Orchestrierung
+    ├── controller.py     # Orchestrierung
+    ├── opentelemetry_collector.py  # OTel Collector
+    ├── jaeger.py         # Jaeger Tracing
+    └── prometheus.py     # Prometheus Metrics
 ```
 
 ## Nützliche Befehle

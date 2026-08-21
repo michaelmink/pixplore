@@ -13,5 +13,9 @@ text2vec_container = docker.Container(
     name="text2vec",
     image=text2vec_image.image_name,
     ports=[docker.ContainerPortArgs(internal=8081, external=8090)],
+    envs=[
+        "OTEL_SERVICE_NAME=text2vec",
+        "OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317",
+    ],
     networks_advanced=[docker.ContainerNetworksAdvancedArgs(name=network.name)],
 )
