@@ -15,6 +15,7 @@
   <img src="https://img.shields.io/badge/docker-compose%20%7C%20pulumi-2496ED?logo=docker&logoColor=white" alt="Docker">
   <img src="https://img.shields.io/badge/k8s-GKE-326CE5?logo=kubernetes&logoColor=white" alt="Kubernetes">
   <img src="https://img.shields.io/badge/observability-OpenTelemetry-7B61FF?logo=opentelemetry&logoColor=white" alt="OTel">
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License">
 </p>
 
 ---
