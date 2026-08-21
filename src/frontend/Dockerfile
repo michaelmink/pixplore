@@ -7,4 +7,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["streamlit", "run", "start_server.py"]
+RUN opentelemetry-bootstrap -a install
+
+CMD ["opentelemetry-instrument", "streamlit", "run", "start_server.py"]

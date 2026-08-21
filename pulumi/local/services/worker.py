@@ -16,7 +16,11 @@ worker_tags_container = docker.Container(
     name="worker_tags",
     image=worker_tags_image.image_name,
     ports=[docker.ContainerPortArgs(internal=50051, external=50051)],
-    envs=["CHROMA_HOST=chromadb"],
+    envs=[
+        "CHROMA_HOST=chromadb",
+        "OTEL_SERVICE_NAME=worker_tags",
+        "OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317",
+    ],
     volumes=[
         docker.ContainerVolumeArgs(
             host_path="/tmp/images", container_path="/tmp/images"
@@ -39,6 +43,10 @@ worker_thumbnails_container = docker.Container(
     name="worker_thumbnails",
     image=worker_thumbnails_image.image_name,
     ports=[docker.ContainerPortArgs(internal=50052, external=50052)],
+    envs=[
+        "OTEL_SERVICE_NAME=worker_thumbnails",
+        "OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317",
+    ],
     volumes=[
         docker.ContainerVolumeArgs(
             host_path="/tmp/images", container_path="/tmp/images"
@@ -62,7 +70,11 @@ worker_embeddings_container = docker.Container(
     "worker-embeddings",
     name="worker_embeddings",
     image=worker_embeddings_image.image_name,
-    envs=["CHROMA_HOST=chromadb"],
+    envs=[
+        "CHROMA_HOST=chromadb",
+        "OTEL_SERVICE_NAME=worker_embeddings",
+        "OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317",
+    ],
     volumes=[
         docker.ContainerVolumeArgs(
             host_path="/tmp/images", container_path="/tmp/images"

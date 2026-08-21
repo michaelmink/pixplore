@@ -5,3 +5,5 @@ chromadb
 torch
 transformers
 numpy
+opentelemetry-distro
+opentelemetry-exporter-otlp

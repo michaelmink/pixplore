@@ -19,6 +19,8 @@ frontend_container = docker.Container(
     envs=[
         "BASE_PATH=/tmp/images",
         "TEXT2VEC_URL=http://text2vec:8081",
+        "OTEL_SERVICE_NAME=frontend",
+        "OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317",
     ],
     volumes=[
         docker.ContainerVolumeArgs(

@@ -22,6 +22,8 @@ controller_container = docker.Container(
     envs=[
         "WATCH_DIR=/tmp/images",
         "CONCURRENCY=5",
+        "OTEL_SERVICE_NAME=controller",
+        "OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317",
     ],
     volumes=[
         docker.ContainerVolumeArgs(

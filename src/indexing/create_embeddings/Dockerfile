@@ -11,4 +11,6 @@ COPY . .
 
 RUN python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. service.proto
 
-CMD ["python", "worker_embeddings.py"]
+RUN opentelemetry-bootstrap -a install
+
+CMD ["opentelemetry-instrument", "python", "worker_embeddings.py"]

@@ -22,6 +22,8 @@ java_api_container = docker.Container(
         pcloud_username.apply(lambda u: f"PCLOUD_USERNAME={u}"),
         pcloud_password.apply(lambda p: f"PCLOUD_PASSWORD={p}"),
         "PCLOUD_DOWNLOAD_PATH=/tmp/images",
+        "OTEL_SERVICE_NAME=java-api",
+        "OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317",
     ],
     volumes=[
         docker.ContainerVolumeArgs(

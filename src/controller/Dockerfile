@@ -11,6 +11,8 @@ COPY . .
 
 RUN python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. service.proto
 
+RUN opentelemetry-bootstrap -a install
+
 USER 1000:1000
 
-CMD ["python", "controller.py"]
+CMD ["opentelemetry-instrument", "python", "controller.py"]

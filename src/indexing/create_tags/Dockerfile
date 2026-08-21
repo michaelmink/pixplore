@@ -15,5 +15,7 @@ COPY . .
 # Protobuf-Dateien für gRPC generieren
 RUN python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. service.proto
 
+RUN opentelemetry-bootstrap -a install
+
 # Der Standardbefehl wird in der docker-compose überschrieben
-CMD ["python", "worker_tags.py"]
+CMD ["opentelemetry-instrument", "python", "worker_tags.py"]
