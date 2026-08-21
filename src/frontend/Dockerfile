@@ -1,12 +1,14 @@
-FROM python:3.10-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
 
 COPY . .
 
-RUN opentelemetry-bootstrap -a install
+RUN uv run opentelemetry-bootstrap -a requirements | uv pip install -r -
 
-CMD ["opentelemetry-instrument", "streamlit", "run", "start_server.py"]
+CMD ["uv", "run", "opentelemetry-instrument", "streamlit", "run", "start_server.py"]

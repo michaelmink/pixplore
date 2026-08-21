@@ -11,7 +11,7 @@ text2vec_image = docker.Image(
 text2vec_container = docker.Container(
     "text2vec",
     name="text2vec",
-    image=text2vec_image.image_name,
+    image=text2vec_image.repo_digest,
     ports=[docker.ContainerPortArgs(internal=8081, external=8090)],
     envs=[
         "OTEL_SERVICE_NAME=text2vec",

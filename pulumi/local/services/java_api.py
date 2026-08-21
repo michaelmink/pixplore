@@ -16,7 +16,7 @@ java_api_image = docker.Image(
 java_api_container = docker.Container(
     "java-api",
     name="java-api",
-    image=java_api_image.image_name,
+    image=java_api_image.repo_digest,
     ports=[docker.ContainerPortArgs(internal=8080, external=8080)],
     envs=[
         pcloud_username.apply(lambda u: f"PCLOUD_USERNAME={u}"),
@@ -24,6 +24,7 @@ java_api_container = docker.Container(
         "PCLOUD_DOWNLOAD_PATH=/tmp/images",
         "OTEL_SERVICE_NAME=java-api",
         "OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317",
+        "OTEL_EXPORTER_OTLP_PROTOCOL=grpc",
     ],
     volumes=[
         docker.ContainerVolumeArgs(

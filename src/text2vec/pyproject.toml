@@ -1,0 +1,17 @@
+[project]
+name = "text2vec"
+version = "0.1.0"
+description = "Service to Return Vector Embeddings for Text"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "torch",
+    "torchvision",
+    "transformers",
+    "numpy",
+    "Pillow",
+    "fastapi",
+    "uvicorn",
+    "opentelemetry-distro",
+    "opentelemetry-exporter-otlp",
+]

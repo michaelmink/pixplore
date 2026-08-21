@@ -1,0 +1,14 @@
+[project]
+name = "controller"
+version = "0.1.0"
+description = "Controller Script"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "grpcio",
+    "grpcio-tools",
+    "chromadb",
+    "aiohttp",
+    "opentelemetry-distro",
+    "opentelemetry-exporter-otlp",
+]

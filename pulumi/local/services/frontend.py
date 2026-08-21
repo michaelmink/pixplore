@@ -14,7 +14,7 @@ frontend_image = docker.Image(
 frontend_container = docker.Container(
     "frontend",
     name="frontend",
-    image=frontend_image.image_name,
+    image=frontend_image.repo_digest,
     ports=[docker.ContainerPortArgs(internal=8501, external=8501)],
     envs=[
         "BASE_PATH=/tmp/images",

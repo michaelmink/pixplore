@@ -1,8 +1,0 @@
-streamlit
-pyyaml
-Pillow
-chromadb==1.5.9
-requests
-numpy
-opentelemetry-distro
-opentelemetry-exporter-otlp

@@ -18,7 +18,7 @@ controller_image = docker.Image(
 controller_container = docker.Container(
     "controller",
     name="controller",
-    image=controller_image.image_name,
+    image=controller_image.repo_digest,
     envs=[
         "WATCH_DIR=/tmp/images",
         "CONCURRENCY=5",

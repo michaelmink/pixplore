@@ -11,7 +11,7 @@ chromadb_image = docker.Image(
 chromadb_container = docker.Container(
     "chromadb",
     name="chromadb",
-    image=chromadb_image.image_name,
+    image=chromadb_image.repo_digest,
     ports=[docker.ContainerPortArgs(internal=8000, external=8000)],
     envs=[
         "CHROMA_OTEL_COLLECTION_ENDPOINT=http://otel-collector:4317",

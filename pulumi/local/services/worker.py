@@ -14,7 +14,7 @@ worker_tags_image = docker.Image(
 worker_tags_container = docker.Container(
     "worker-tags",
     name="worker_tags",
-    image=worker_tags_image.image_name,
+    image=worker_tags_image.repo_digest,
     ports=[docker.ContainerPortArgs(internal=50051, external=50051)],
     envs=[
         "CHROMA_HOST=chromadb",
@@ -41,7 +41,7 @@ worker_thumbnails_image = docker.Image(
 worker_thumbnails_container = docker.Container(
     "worker-thumbnails",
     name="worker_thumbnails",
-    image=worker_thumbnails_image.image_name,
+    image=worker_thumbnails_image.repo_digest,
     ports=[docker.ContainerPortArgs(internal=50052, external=50052)],
     envs=[
         "OTEL_SERVICE_NAME=worker_thumbnails",
@@ -69,7 +69,7 @@ worker_embeddings_image = docker.Image(
 worker_embeddings_container = docker.Container(
     "worker-embeddings",
     name="worker_embeddings",
-    image=worker_embeddings_image.image_name,
+    image=worker_embeddings_image.repo_digest,
     envs=[
         "CHROMA_HOST=chromadb",
         "OTEL_SERVICE_NAME=worker_embeddings",
