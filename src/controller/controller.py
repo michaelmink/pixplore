@@ -1,8 +1,8 @@
 import asyncio
 import logging
 import os
-import grpc
 import csv
+import grpc
 import aiohttp
 
 # Importiere die vom Dockerfile generierten Protobuf-Stubs
@@ -49,7 +49,8 @@ async def execute_forward_step(
 
         # WICHTIG: Erhaltene Record-ID sofort im In-Memory Saga-Log sichern
         logger.info(
-            f"✅ \033[1;32m{worker_name}\033[0m meldet Erfolg. Record-ID gemerkt: {response.db_record_id}"
+            f"✅ \033[1;32m{worker_name}\033[0m meldet Erfolg. "
+            f"Record-ID gemerkt: {response.db_record_id}"
         )
         return response
 
@@ -96,7 +97,7 @@ async def run_saga_orchestrator(task_id: str, img_path: str):
                 return
             logger.info(f"⬇️ Download erfolgreich für {img_path}")
 
-    # TODO: Workaround!
+    # Workaround!
     img_path = os.path.join(WATCH_DIR, os.path.basename(img_path))
 
     # check if file exists
