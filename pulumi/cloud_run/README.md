@@ -56,10 +56,11 @@ Das Frontend läuft in `europe-west1`, weil Google Cloud Run dort Domain-Mapping
 
 ## Katalog veroeffentlichen
 
-Der lokale Controller schreibt Batches unter `/tmp/images/catalog`. Vor dem naechsten Cloud-Run-Start muessen sie in den Bucket synchronisiert werden:
+Der lokale Controller schreibt Batches unter `/tmp/images/catalog`. Die erzeugten Thumbnails liegen unter `/tmp/images/thumbnails`. Vor dem naechsten Cloud-Run-Start muessen beide Pfade in den Bucket synchronisiert werden:
 
 ```bash
 gsutil -m rsync -r /tmp/images/catalog gs://pixplore-bucket/catalog
+gsutil -m rsync -r /tmp/images/thumbnails gs://pixplore-bucket/thumbnails
 ```
 
 Danach eine neue Cloud-Run-Revision erzwingen:

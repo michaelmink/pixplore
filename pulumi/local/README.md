@@ -163,6 +163,13 @@ Die Worker schreiben nicht direkt in ChromaDB. Der Controller sammelt die drei g
 
 Die Parquet-Zeilen enthalten Bild-ID, Content-Hash, Metadaten, Embedding und Thumbnail-Pfad. Bereits katalogisierte Bild-IDs werden beim nächsten Lauf übersprungen. ChromaDB bleibt lokal der Suchindex; der persistente Katalog liegt in den Parquet-Batches.
 
+Für Cloud Run müssen neben den Parquet-Batches auch die erzeugten Dateien synchronisiert werden:
+
+```bash
+gsutil -m rsync -r /tmp/images/catalog gs://pixplore-bucket/catalog
+gsutil -m rsync -r /tmp/images/thumbnails gs://pixplore-bucket/thumbnails
+```
+
 ## Encryption
 
 Bei `pulumi login --local` wird eine Passphrase benötigt:
