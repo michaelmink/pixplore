@@ -1,13 +1,13 @@
-# Controller – Saga Orchestrator
+# Controller – Image Pipeline
 
 Überwacht `/tmp/images` auf neue JPG-Dateien und orchestriert deren Verarbeitung über gRPC-Worker. Verarbeitet mehrere Bilder parallel via Semaphore.
 
 ## Architektur
 
 ```
-                          ┌→ Worker_Tags        (gRPC :50051) → ChromaDB
+                          ┌→ Worker_Tags        (gRPC :50051) → result
 CSV → Controller (async) ─┼→ Worker_Thumbnails  (gRPC :50052)
-                          └→ Worker_Embeddings  (gRPC :50053) → ChromaDB
+                          └→ Worker_Embeddings  (gRPC :50053) → result
 ```
 
 - Pro Bild laufen alle 3 Worker parallel (`asyncio.gather`)
@@ -18,16 +18,17 @@ CSV → Controller (async) ─┼→ Worker_Thumbnails  (gRPC :50052)
 
 1. Controller pollt alle 5s den Ordner `/tmp/images` nach `list_files.csv`
 2. Alle Bilder aus der CSV werden parallel verarbeitet (begrenzt durch Semaphore)
-3. Pro Bild startet ein Saga-Workflow mit 3 parallelen Worker-Aufrufen
-4. Bei Fehler: Kompensation (Rollback) an alle bereits erfolgreichen Worker
-5. Nach Erfolg: Bild wird gelöscht
+3. Pro Bild startet eine Saga mit 3 parallelen Worker-Aufrufen
+4. Worker-Ergebnisse werden gesammelt und als Parquet-Zeile committed
+5. Bei Fehler bleibt das Bild auf der Retry-Liste
+6. Nach Commit wird das Bild gelöscht
 
 ## Voraussetzungen
 
 - Worker_Tags läuft auf Port 50051
 - Worker_Thumbnails läuft auf Port 50052
 - Worker_Embeddings läuft auf Port 50053 (skalierbar via Replicas)
-- ChromaDB läuft auf Port 8000
+- ChromaDB wird separat aus den Parquet-Batches aufgebaut
 
 ## Setup
 
@@ -56,6 +57,7 @@ python controller.py
 | `WATCH_DIR` | `/tmp/images` | Ordner der auf JPGs überwacht wird |
 | `POLL_INTERVAL` | `5` | Polling-Intervall in Sekunden |
 | `CONCURRENCY` | `5` | Max. gleichzeitig verarbeitete Bilder (Semaphore) |
+| `CATALOG_DIR` | `/tmp/images/catalog` | Parquet-Batches und Manifest |
 
 ## Docker Compose
 
@@ -65,10 +67,4 @@ Der Controller wird zusammen mit den anderen Services gestartet:
 docker compose up --build controller
 ```
 
-## ChromaDB-Einträge prüfen
-
-```bash
-curl -s http://localhost:8000/api/v2/tenants/default_tenant/databases/default_database/collections/image_tags/get \
-  -X POST -H "Content-Type: application/json" \
-  -d '{"include": ["metadatas", "documents"]}' | python -m json.tool
-```
+ChromaDB liest die fertigen Batches beim Containerstart und ist ein temporärer Suchindex.

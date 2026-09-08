@@ -1,6 +1,6 @@
 # Pixplore — GKE Deployment (Pulumi)
 
-Deployt frontend, text2vec und ChromaDB auf einen GKE Kubernetes Cluster. Thumbnails und VectorDB liegen auf einem GCS Bucket und werden via GCS FUSE in die Pods gemountet.
+Deployt frontend, text2vec und ChromaDB auf einen GKE Kubernetes Cluster. Die Worker liefern Ergebnisse an den Controller; der Katalog wird als Parquet gepflegt und ChromaDB nutzt den GCS-Mount als Datenquelle bzw. Suchindex.
 
 ## Architektur
 

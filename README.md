@@ -6,12 +6,12 @@
 
 <p align="center">
   <strong>AI-powered Image Explorer</strong><br>
-  <em>Search your photo library with natural language. Powered by BLIP2 embeddings, gRPC microservices, and a Saga orchestrator.</em>
+  <em>Search your photo library with natural language. Powered by BLIP2 embeddings, gRPC microservices, and a Parquet catalog.</em>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/python-3.11-blue?logo=python&logoColor=white" alt="Python">
-  <img src="https://img.shields.io/badge/java-21-orange?logo=openjdk&logoColor=white" alt="Java">
+  <img src="https://img.shields.io/badge/python-3.12-blue?logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/java-17-orange?logo=openjdk&logoColor=white" alt="Java">
   <img src="https://img.shields.io/badge/docker-compose%20%7C%20pulumi-2496ED?logo=docker&logoColor=white" alt="Docker">
   <img src="https://img.shields.io/badge/k8s-GKE-326CE5?logo=kubernetes&logoColor=white" alt="Kubernetes">
   <img src="https://img.shields.io/badge/observability-OpenTelemetry-7B61FF?logo=opentelemetry&logoColor=white" alt="OTel">
@@ -27,12 +27,12 @@
 | ☁️ **Cloud Sync** | Pulls images from pCloud via WebDAV (Spring Boot) |
 | 🏷️ **Auto-Tagging** | Extracts EXIF metadata, GPS, dates, faces |
 | 🖼️ **Thumbnails** | Generates optimized previews on ingest |
-| 🧠 **Embeddings** | BLIP2 image+text embeddings stored in ChromaDB |
+| 🧠 **Embeddings** | BLIP2 image+text embeddings stored in Parquet and indexed by ChromaDB |
 | 🔍 **Semantic Search** | "sunset at the beach" → finds matching photos |
 | 👤 **Face Recognition** | Finetuned model detects family members |
 | 📊 **Observability** | Distributed tracing (Jaeger) + metrics (Prometheus) via OTel |
 
-**Target Platform:** Docker Compose → Pulumi (lokal) → GKE (Google Cloud)
+**Target Platform:** Docker Compose → Pulumi (lokal) → GKE or Cloud Run
 
 ## Architecture
 
@@ -54,8 +54,9 @@ graph LR
     end
 
     subgraph Storage
-        FS[/tmp/images/]
-        DB[(ChromaDB :8000)]
+      FS[/tmp/images/]
+      CAT[(Parquet catalog)]
+      DB[(ChromaDB :8000)]
     end
 
     subgraph Search & UI
@@ -73,9 +74,11 @@ graph LR
     API -->|download| FS
     CTRL -->|watches| FS
     CTRL -->|gRPC| WT & WTH & WE
-    WT -->|metadata| DB
-    WE -->|embeddings| DB
+    WT -->|metadata| CTRL
+    WE -->|embeddings| CTRL
     WTH -->|thumbnails| FS
+    CTRL -->|batch commit| CAT
+    CAT -->|startup rebuild| DB
     FE -->|query| DB
     FE -->|embed text| T2V
     T2V -->|vector| DB
@@ -87,9 +90,11 @@ graph LR
 ### Data Flow
 
 ```
-pCloud → java-api → /tmp/images/*.jpg → Controller ─┬→ Worker_Tags → ChromaDB (metadata)
+pCloud → java-api → /tmp/images/*.jpg → Controller ─┬→ Worker_Tags → gRPC result
                                                      ├→ Worker_Thumbnails → /thumbnails/
-                                                     └→ Worker_Embeddings → ChromaDB (vectors)
+                                                     └→ Worker_Embeddings → gRPC result
+
+Controller → catalog/batch-*.parquet + manifest.json → ChromaDB startup rebuild
 
 Frontend → text2vec (BLIP2) → Embedding → ChromaDB Cosine Similarity → Results
 ```
@@ -102,10 +107,10 @@ Frontend → text2vec (BLIP2) → Embedding → ChromaDB Cosine Similarity → R
 | `frontend` | 8501 | Streamlit UI — browse, filter, semantic search |
 | `text2vec` | 8090 | FastAPI — BLIP2 text embeddings |
 | `chromadb` | 8000 | Vector database (metadata + embeddings) |
-| `worker_tags` | 50051 | gRPC — EXIF extraction → ChromaDB |
+| `worker_tags` | 50051 | gRPC — EXIF extraction → controller |
 | `worker_thumbnails` | 50052 | gRPC — thumbnail generation |
-| `worker_embeddings` | — | gRPC — BLIP2 image embeddings → ChromaDB |
-| `controller` | — | Saga orchestrator — dispatches to workers |
+| `worker_embeddings` | — | gRPC — BLIP2 image embeddings → controller |
+| `controller` | — | Image-level pipeline and Parquet batch writer |
 | `otel-collector` | 4317/4318 | OpenTelemetry Collector (OTLP) |
 | `jaeger` | 16686 | Distributed tracing UI |
 | `prometheus` | 9090 | Metrics scraping & queries |
@@ -210,7 +215,7 @@ kubectl delete -f k8s/                            # Alles aufräumen
 
 ## Internet Facing
 
-Using [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) + [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/) for secure public access with authentication.
+Cloud Run frontend access is restricted by Cloud Run IAM to selected Google accounts. `pixplore.org` is managed through Cloudflare DNS.
 
 ### Expose via Cloudflare Tunnel
 

@@ -5,7 +5,7 @@ Deployt frontend, text2vec und ChromaDB als getrennte Cloud-Run-Services.
 ## Architektur
 
 ```text
-Frontend (oeffentlich)
+Frontend (IAM-geschuetzt, pixplore.org)
   |-- ID-Token -> text2vec (nur Frontend-SA)
   `-- ID-Token -> chromadb (Frontend-SA und konfigurierter Benutzer)
 
@@ -33,12 +33,14 @@ pip install -r requirements.txt
 pulumi login --local
 pulumi stack init prod
 pulumi config set gcp:project pixplore-503406
-pulumi config set gcp:region europe-west3
+pulumi config set gcp:region europe-west1
+pulumi config set registry-region europe-west3
 pulumi config set bucket-name pixplore-bucket
 pulumi config set admin-email deine-adresse@example.com
+pulumi config set partner-email partner@example.com
 ```
 
-`admin-email` erhaelt `roles/run.invoker` auf ChromaDB fuer authentifizierte Laptop-Zugriffe.
+`admin-email` und `partner-email` erhalten `roles/run.invoker` auf das Frontend. `admin-email` erhält zusätzlich Zugriff auf ChromaDB für authentifizierte Laptop-Zugriffe.
 
 ## Deployen
 
@@ -49,6 +51,8 @@ pulumi stack output
 ```
 
 Die Outputs enthalten URLs fuer Frontend, ChromaDB und text2vec.
+
+Das Frontend läuft in `europe-west1`, weil Google Cloud Run dort Domain-Mappings unterstützt. Die Container-Images liegen weiterhin in der bestehenden Artifact Registry in `europe-west3`.
 
 ## Katalog veroeffentlichen
 
@@ -72,13 +76,13 @@ Die neue Revision liest beim Start alle Dateien unter `catalog/*.parquet` und er
 ```bash
 TOKEN=$(gcloud auth print-identity-token)
 curl -H "Authorization: Bearer $TOKEN" \
-  "$(pulumi stack output chromadb_url)/api/v1/heartbeat"
+  "$(pulumi stack output chromadb_url)/api/v2/heartbeat"
 ```
 
 ## Ressourcen
 
 | Service | Skalierung | Persistenz |
 |---|---:|---|
-| frontend | 0-2 | GCS read-only fuer Bilder/Thumbnails |
+| frontend | 0-2 | GCS read-only fuer Bilder/Thumbnails, IAM-restricted |
 | text2vec | 0-2 | stateless |
 | chromadb | 0-1 | Parquet-Batches in GCS, Index in `/tmp` |

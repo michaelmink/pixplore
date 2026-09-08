@@ -1,11 +1,10 @@
 # create_embeddings – gRPC Worker für BLIP2-Embeddings
 
-gRPC-basierter Worker, der BLIP2-Embeddings aus Bildern generiert und in ChromaDB speichert. Unterstützt horizontale Skalierung via `dns:///` + round-robin.
+gRPC-basierter Worker, der BLIP2-Embeddings aus Bildern generiert und an den Controller zurückgibt. Unterstützt horizontale Skalierung via `dns:///` + round-robin.
 
 ## Voraussetzungen
 
 - Python 3.10+
-- Laufender ChromaDB-Server (Docker)
 - GPU empfohlen (läuft auch auf CPU, aber deutlich langsamer)
 
 ## Setup
@@ -22,19 +21,13 @@ pip install -r requirements.txt
 python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. service.proto
 ```
 
-## ChromaDB starten
-
-```bash
-docker run -d -p 8000:8000 chromadb/chroma
-```
-
 ## Worker starten
 
 ```bash
 python worker_embeddings.py
 ```
 
-Der Server läuft auf Port 50053 und verbindet sich mit ChromaDB auf localhost:8000.
+Der Server läuft auf Port 50053 und liefert das Embedding über gRPC.
 
 ## Skalierung
 
@@ -45,8 +38,6 @@ embedding-worker:
   build: ./src/indexing/create_embeddings
   deploy:
     replicas: 5
-  environment:
-    - CHROMA_HOST=chromadb
 ```
 
 Der Controller nutzt `dns:///embedding-worker:50053` mit gRPC client-side round-robin Load Balancing.

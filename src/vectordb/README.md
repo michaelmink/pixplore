@@ -27,26 +27,13 @@ print(col.peek(5))
 
 ## Deployment
 
-Die VectorDB wird **nicht als separater Service** deployed. Stattdessen wird die DB direkt als GCS Volume in den Frontend-Container gemountet und per `PersistentClient` gelesen.
-
-### Sync nach GCS
+Parquet-Batches in `catalog/` sind die persistente Quelle. ChromaDB läuft als eigener Service und baut beim Start einen lokalen Index unter `/tmp/chroma` daraus auf.
 
 ```bash
-gsutil -m rsync -r data/vector_db/ gs://pixplore-vectordb/
+gsutil -m rsync -r /tmp/images/catalog gs://pixplore-bucket/catalog
 ```
 
-### Cloud Run Frontend Deploy mit DB-Mount
-
-```bash
-gcloud run deploy frontend \
-  --image europe-west1-docker.pkg.dev/pixplore-503406/pixplore/frontend:latest \
-  --region europe-west1 \
-  --port 8080 \
-  --execution-environment gen2 \
-  --add-volume name=chromadata,type=cloud-storage,bucket=pixplore-vectordb \
-  --add-volume-mount volume=chromadata,mount-path=/data/vector_db \
-  --allow-unauthenticated
-```
+Worker schreiben nicht direkt nach ChromaDB. Der Controller erzeugt Parquet, ChromaDB importiert es beim Start.
 
 ## Dockerfile
 
