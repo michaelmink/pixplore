@@ -1,0 +1,9 @@
+config:
+  gcp:project: pixplore-503406
+  gcp:region: europe-west1
+  pixplore-cloudrun:registry-region: europe-west3
+  pixplore-cloudrun:bucket-name: pixplore-bucket
+  pixplore-cloudrun:admin-email: mink.m@gmx.de
+  pixplore-cloudrun:partner-email: janine.mink81@gmail.com
+  pixplore-cloudrun:catalog-version: 20260908T195433Z
+encryptionsalt: v1:LlZlEfHL8wY=:v1:O5QpY2OsGPTHDL8y:3QutCrsxr8ZzKzY4TIHti2RkCo0Hmw==

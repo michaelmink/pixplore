@@ -1,6 +1,6 @@
 # Pixplore — GKE Deployment (Pulumi)
 
-Deployt frontend + text2vec auf einen GKE Kubernetes Cluster. Thumbnails und VectorDB liegen auf einem GCS Bucket und werden via GCS FUSE in die Pods gemountet.
+Deployt frontend, text2vec und ChromaDB auf einen GKE Kubernetes Cluster. Thumbnails und VectorDB liegen auf einem GCS Bucket und werden via GCS FUSE in die Pods gemountet.
 
 ## Architektur
 
@@ -82,6 +82,8 @@ pulumi stack output
 | ServiceAccount `pixplore` | K8s | Pod-Identity mit GSA-Annotation |
 | Deployment `text2vec` | K8s | Embedding-Modell (8Gi RAM) |
 | Service `text2vec` | K8s | ClusterIP, intern erreichbar |
+| Deployment `chromadb` | K8s | ChromaDB mit GCS FUSE auf `/data` |
+| Service `chromadb` | K8s | ClusterIP auf Port 8000 |
 | Deployment `frontend` | K8s | Streamlit UI mit GCS FUSE Mount |
 | Service `frontend` | K8s | LoadBalancer, öffentliche IP |
 
@@ -105,6 +107,7 @@ pulumi destroy
 # Logs der Pods (über kubectl, nicht Pulumi)
 kubectl logs -n pixplore -l app=frontend
 kubectl logs -n pixplore -l app=text2vec
+kubectl logs -n pixplore -l app=chromadb
 ```
 
 ## Konzepte

@@ -1,4 +1,4 @@
-"""Pixplore GKE Deployment — frontend + text2vec."""
+"""Pixplore GKE Deployment — frontend, text2vec, chromadb."""
 
 import pulumi
 import pulumi_gcp as gcp
@@ -52,6 +52,14 @@ frontend_image = docker_build.Image(
     registries=[docker_registry],
 )
 
+chromadb_image = docker_build.Image(
+    "chromadb-image",
+    context=docker_build.BuildContextArgs(location="../../src/vectordb"),
+    tags=[f"{REGISTRY}/chromadb:latest"],
+    push=True,
+    registries=[docker_registry],
+)
+
 # ---------------------------------------------------------------------------
 # Kubernetes Namespace
 # ---------------------------------------------------------------------------
@@ -73,6 +81,13 @@ gcp.storage.BucketIAMMember(
     "gsa-bucket-reader",
     bucket=BUCKET_NAME,
     role="roles/storage.objectViewer",
+    member=gsa.email.apply(lambda e: f"serviceAccount:{e}"),
+)
+
+gcp.storage.BucketIAMMember(
+    "gsa-bucket-writer",
+    bucket=BUCKET_NAME,
+    role="roles/storage.objectAdmin",
     member=gsa.email.apply(lambda e: f"serviceAccount:{e}"),
 )
 
@@ -142,6 +157,71 @@ text2vec_svc = k8s.core.v1.Service(
 )
 
 # ---------------------------------------------------------------------------
+# ChromaDB Deployment + Service (mit GCS FUSE für persistente Daten)
+# ---------------------------------------------------------------------------
+chromadb_labels = {"app": "chromadb"}
+
+chromadb_deployment = k8s.apps.v1.Deployment(
+    "chromadb",
+    metadata=k8s.meta.v1.ObjectMetaArgs(name="chromadb", namespace="pixplore"),
+    spec=k8s.apps.v1.DeploymentSpecArgs(
+        replicas=1,
+        selector=k8s.meta.v1.LabelSelectorArgs(match_labels=chromadb_labels),
+        template=k8s.core.v1.PodTemplateSpecArgs(
+            metadata=k8s.meta.v1.ObjectMetaArgs(
+                labels=chromadb_labels,
+                annotations={"gke-gcsfuse/volumes": "true"},
+            ),
+            spec=k8s.core.v1.PodSpecArgs(
+                service_account_name="pixplore",
+                containers=[
+                    k8s.core.v1.ContainerArgs(
+                        name="chromadb",
+                        image=chromadb_image.ref,
+                        ports=[k8s.core.v1.ContainerPortArgs(container_port=8000)],
+                        volume_mounts=[
+                            k8s.core.v1.VolumeMountArgs(
+                                name="gcs-data",
+                                mount_path="/data",
+                                read_only=False,
+                            )
+                        ],
+                        resources=k8s.core.v1.ResourceRequirementsArgs(
+                            requests={"memory": "512Mi", "cpu": "500m"},
+                            limits={"memory": "2Gi", "cpu": "1"},
+                        ),
+                    )
+                ],
+                volumes=[
+                    k8s.core.v1.VolumeArgs(
+                        name="gcs-data",
+                        csi=k8s.core.v1.CSIVolumeSourceArgs(
+                            driver="gcsfuse.csi.storage.gke.io",
+                            read_only=False,
+                            volume_attributes={
+                                "bucketName": BUCKET_NAME,
+                                "dirPrefix": "vectordb/",
+                            },
+                        ),
+                    )
+                ],
+            ),
+        ),
+    ),
+    opts=pulumi.ResourceOptions(depends_on=[ns, ksa]),
+)
+
+chromadb_svc = k8s.core.v1.Service(
+    "chromadb-svc",
+    metadata=k8s.meta.v1.ObjectMetaArgs(name="chromadb", namespace="pixplore"),
+    spec=k8s.core.v1.ServiceSpecArgs(
+        selector=chromadb_labels,
+        ports=[k8s.core.v1.ServicePortArgs(port=8000, target_port=8000)],
+    ),
+    opts=pulumi.ResourceOptions(depends_on=[ns]),
+)
+
+# ---------------------------------------------------------------------------
 # frontend Deployment + Service (mit GCS FUSE für Thumbnails/VectorDB)
 # ---------------------------------------------------------------------------
 frontend_labels = {"app": "frontend"}
@@ -171,6 +251,10 @@ frontend_deployment = k8s.apps.v1.Deployment(
                             k8s.core.v1.EnvVarArgs(
                                 name="TEXT2VEC_URL",
                                 value="http://text2vec:8081",
+                            ),
+                            k8s.core.v1.EnvVarArgs(
+                                name="CHROMA_HOST",
+                                value="chromadb",
                             ),
                         ],
                         volume_mounts=[
@@ -225,3 +309,4 @@ pulumi.export(
     ),
 )
 pulumi.export("text2vec_cluster_url", "http://text2vec.pixplore.svc.cluster.local:8081")
+pulumi.export("chromadb_cluster_url", "http://chromadb.pixplore.svc.cluster.local:8000")

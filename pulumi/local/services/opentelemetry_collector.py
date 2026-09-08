@@ -1,3 +1,4 @@
+import pulumi
 import pulumi_docker as docker
 from services import network
 
@@ -24,4 +25,5 @@ otel_collector_container = docker.Container(
         )
     ],
     networks_advanced=[docker.ContainerNetworksAdvancedArgs(name=network.name)],
+    opts=pulumi.ResourceOptions(depends_on=[network]),
 )

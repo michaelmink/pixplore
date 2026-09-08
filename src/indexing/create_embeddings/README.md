@@ -54,11 +54,11 @@ Der Controller nutzt `dns:///embedding-worker:50053` mit gRPC client-side round-
 ## Architektur
 
 ```
-Controller (gRPC, round-robin) → N × EmbeddingWorker (Port 50053) → ChromaDB (Port 8000)
+Controller (gRPC, round-robin) → N × EmbeddingWorker (Port 50053) → Controller-Parquet-Batch
 ```
 
 Der Worker:
 1. Empfängt einen Image-Pfad per gRPC (`ProcessTask`)
 2. Generiert ein 256-dimensionales BLIP2-Embedding (ViT-G + Q-Former)
-3. Schreibt das Embedding in die ChromaDB-Collection `image_embeddings` (cosine distance)
-4. `CompensateTask` löscht den Eintrag bei SAGA-Rollback
+3. Gibt das Embedding an den Controller zurück
+4. Der Controller schreibt das vollständige Bildresultat in einen Parquet-Batch

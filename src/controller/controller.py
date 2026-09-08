@@ -2,8 +2,14 @@ import asyncio
 import logging
 import os
 import csv
+import hashlib
+import json
+from datetime import datetime, timezone
+from pathlib import Path
 import grpc
 import aiohttp
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 # Importiere die vom Dockerfile generierten Protobuf-Stubs
 import service_pb2
@@ -11,6 +17,7 @@ import service_pb2_grpc
 
 WATCH_DIR = os.getenv("WATCH_DIR", "/tmp/images")
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "5"))
+CATALOG_DIR = Path(os.getenv("CATALOG_DIR", os.path.join(WATCH_DIR, "catalog")))
 
 # Logger-Formatierung für gute Lesbarkeit auf der Hörsaal-Leinwand
 logging.basicConfig(
@@ -29,14 +36,17 @@ WORKERS = {
     "Worker_Embeddings": "dns:///worker_embeddings:50053",
 }
 
+SAGA_PENDING = "PENDING"
+SAGA_DOWNLOADED = "DOWNLOADED"
+SAGA_WORKERS_COMPLETED = "WORKERS_COMPLETED"
+SAGA_COMMITTED = "COMMITTED"
+SAGA_RETRY = "RETRY"
+
 
 async def execute_forward_step(
     worker_name: str, addr: str, req: service_pb2.TaskRequest
 ):
-    """
-    Führt den vorwärtsgerichteten RPC-Aufruf aus (Forward Transaction).
-    Registriert den Erfolg im Saga-Log des Orchestrators.
-    """
+    """Execute one worker step and return its result."""
     logger.info(
         f"📡 Sende Task {req.task_id} an \033[1;32m{worker_name}\033[0m ({addr})..."
     )
@@ -47,7 +57,6 @@ async def execute_forward_step(
         # RPC ausführen mit einem harten Timeout von 3 Sekunden
         response = await stub.ProcessTask(req)
 
-        # WICHTIG: Erhaltene Record-ID sofort im In-Memory Saga-Log sichern
         logger.info(
             f"✅ \033[1;32m{worker_name}\033[0m meldet Erfolg. "
             f"Record-ID gemerkt: {response.db_record_id}"
@@ -55,34 +64,12 @@ async def execute_forward_step(
         return response
 
 
-async def execute_compensating_step(
-    worker_name: str, addr: str, task_id: str, record_id: str
-):
-    """
-    Führt die rückwärtsgerichtete Kompensation aus (Compensating Transaction).
-    Löscht oder storniert den Eintrag in der DB des betroffenen Workers.
-    """
-    logger.warning(
-        f"🚨 Sende Kompensation an \033[1;33m{worker_name}\033[0m für Record {record_id}..."
-    )
-
-    async with grpc.aio.insecure_channel(addr) as channel:
-        stub = service_pb2_grpc.WorkerServiceStub(channel)
-        req = service_pb2.CompensateRequest(task_id=task_id, db_record_id=record_id)
-
-        response = await stub.CompensateTask(req, timeout=3.0)
-        logger.warning(
-            f"↩️ \033[1;33m{worker_name}\033[0m erfolgreich kompensiert! Status: {response.status}"
-        )
-        return response
-
-
-async def run_saga_orchestrator(task_id: str, img_path: str):
-    """
-    Der zentrale Saga-Souverän. Er steuert Forward und Backward Recovery.
-    """
+async def process_image_pipeline(task_id: str, img_path: str):
+    """Run the image-level saga and return a committed catalog result."""
+    source_path = img_path
+    saga_state = {"task_id": task_id, "source_path": source_path, "state": SAGA_PENDING}
     logger.info("===========================================================")
-    logger.info(f"🚀 STARTE GLOBALEN SAGA-WORKFLOW (TX-ID: {task_id})")
+    logger.info(f"🚀 STARTE BILD-SAGA (TX-ID: {task_id})")
     logger.info("===========================================================")
 
     # download the image using java_api REST endpoint download_file
@@ -91,19 +78,26 @@ async def run_saga_orchestrator(task_id: str, img_path: str):
             "http://java-api:8080/download_file", params={"path": img_path}
         ) as resp:
             if resp.status != 200:
+                saga_state["state"] = SAGA_RETRY
                 logger.error(
                     f"❌ Download fehlgeschlagen für {img_path}: HTTP {resp.status}"
                 )
-                return
+                return {
+                    "status": "FAILED",
+                    "source_path": source_path,
+                    "saga": saga_state,
+                }
             logger.info(f"⬇️ Download erfolgreich für {img_path}")
 
     # Workaround!
     img_path = os.path.join(WATCH_DIR, os.path.basename(img_path))
+    saga_state["state"] = SAGA_DOWNLOADED
 
     # check if file exists
     if not os.path.exists(img_path):
+        saga_state["state"] = SAGA_RETRY
         logger.error(f"❌ Datei existiert nicht: {img_path}")
-        return
+        return {"status": "FAILED", "source_path": source_path, "saga": saga_state}
 
     # gRPC-Request-Objekt bauen
     request = service_pb2.TaskRequest(task_id=task_id, img_path=img_path)
@@ -122,38 +116,95 @@ async def run_saga_orchestrator(task_id: str, img_path: str):
     try:
         # Scatter-Phase: Alle 3 Worker arbeiten zeitgleich
         # return_exceptions=False sorgt für sofortigen Abbruch beim ersten Fehler!
-        await asyncio.gather(*tasks, return_exceptions=False)
-        logger.info(
-            "🎉 \033[1;32mGLOBALER ERFOLG!\033[0m Alle Microservices sind persistent konsistent."
+        tag_response, thumbnail_response, embedding_response = await asyncio.gather(
+            *tasks, return_exceptions=False
         )
+        if any(
+            response.status != "COMPLETED"
+            for response in (tag_response, thumbnail_response, embedding_response)
+        ):
+            raise RuntimeError(f"Worker failure for {task_id}")
+        logger.info(
+            "🎉 \033[1;32mBILD-SAGA ERFOLGREICH!\033[0m Alle Worker-Schritte sind abgeschlossen."
+        )
+        saga_state["state"] = SAGA_WORKERS_COMPLETED
 
-        # Nach erfolgreicher Verarbeitung löschen
-        os.remove(img_path)
-        logger.info(f"🗑️ {img_path} gelöscht.")
+        return {
+            "status": "COMPLETED",
+            "image_path": img_path,
+            "metadata": json.loads(tag_response.metadata_json),
+            "embedding": list(embedding_response.embedding),
+            "thumbnail_path": thumbnail_response.thumbnail_path,
+            "saga": saga_state,
+        }
 
     except Exception as e:
-        # Gather-Phase im Fehlerfall: Backward Recovery wird eingeleitet
+        saga_state["state"] = SAGA_RETRY
+        thumbnail_path = os.path.join(
+            WATCH_DIR,
+            "thumbnails",
+            f"{Path(img_path).stem}_thumb.jpg",
+        )
+        if os.path.exists(thumbnail_path):
+            os.remove(thumbnail_path)
         logger.error(f"💥 GLOBALER PIPELINE-ABBRUCH! Fehlerursache: {str(e)}")
-        logger.error("⚡ Einleitung des Backward Recovery (Saga Kompensation)...")
+        return {
+            "status": "FAILED",
+            "source_path": source_path,
+            "saga": saga_state,
+        }
 
-        # Erstelle Kompensations-Aufrufe NUR für Worker, die bereits Daten geschrieben haben
-        saga_log = {}
-        compensations = []
-        for committed_worker, record_id in saga_log.items():
-            compensations.append(
-                execute_compensating_step(
-                    committed_worker, WORKERS[committed_worker], task_id, record_id
-                )
-            )
 
-        if compensations:
-            # Führe alle notwendigen Kompensationen parallel aus
-            await asyncio.gather(*compensations)
-            logger.warning(
-                "⚖️ Das verteilte System ist wieder sauber bereinigt (Eventually Consistent)."
-            )
-        else:
-            logger.info("Keine Kompensation nötig. Kein Worker hatte Daten committed.")
+def write_catalog_batch(results):
+    """Persist completed worker results as one immutable Parquet batch."""
+    rows = []
+    for result in results:
+        image_path = result["image_path"]
+        image_id = os.path.basename(image_path)
+
+        with open(image_path, "rb") as image_file:
+            content_hash = hashlib.sha256(image_file.read()).hexdigest()
+
+        rows.append(
+            {
+                "image_id": image_id,
+                "content_hash": content_hash,
+                "filename": image_id,
+                "metadata": json.dumps(result["metadata"], sort_keys=True),
+                "embedding": result["embedding"],
+                "thumbnail_path": result["thumbnail_path"],
+                "processed_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+
+    CATALOG_DIR.mkdir(parents=True, exist_ok=True)
+    batch_name = (
+        f"batch-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}.parquet"
+    )
+    batch_path = CATALOG_DIR / batch_name
+    temporary_path = CATALOG_DIR / f".{batch_name}.tmp"
+    table = pa.Table.from_pylist(rows)
+    pq.write_table(table, temporary_path, compression="zstd")
+    os.replace(temporary_path, batch_path)
+    manifest = {
+        "version": batch_name,
+        "batches": [
+            f"catalog/{path.name}" for path in sorted(CATALOG_DIR.glob("*.parquet"))
+        ],
+    }
+    manifest_path = CATALOG_DIR / "manifest.json"
+    manifest_temporary_path = CATALOG_DIR / ".manifest.json.tmp"
+    manifest_temporary_path.write_text(json.dumps(manifest, indent=2) + "\n")
+    os.replace(manifest_temporary_path, manifest_path)
+    logger.info("Wrote catalog batch %s with %d image(s)", batch_path, len(rows))
+
+
+def catalog_image_ids():
+    image_ids = set()
+    for batch_path in CATALOG_DIR.glob("*.parquet"):
+        table = pq.read_table(batch_path, columns=["image_id"])
+        image_ids.update(table["image_id"].to_pylist())
+    return image_ids
 
 
 async def watch_and_process():
@@ -170,9 +221,23 @@ async def watch_and_process():
 
             async def process_with_limit(task_id, img_path):
                 async with sem:
-                    await run_saga_orchestrator(task_id, img_path)
+                    try:
+                        return await process_image_pipeline(task_id, img_path)
+                    except Exception as error:
+                        logger.exception("Unerwarteter Fehler für %s", task_id)
+                        return {
+                            "status": "FAILED",
+                            "source_path": img_path,
+                            "saga": {
+                                "task_id": task_id,
+                                "source_path": img_path,
+                                "state": SAGA_RETRY,
+                                "error": str(error),
+                            },
+                        }
 
             saga_tasks = []
+            existing_image_ids = catalog_image_ids()
             with open(csv_list_file, newline="") as csvfile:
                 reader = csv.reader(csvfile)
                 for i, img_path in enumerate(reader):
@@ -183,15 +248,43 @@ async def watch_and_process():
                         continue
 
                     task_id = os.path.basename(img_path)
+                    if task_id in existing_image_ids:
+                        logger.info(
+                            f"⏭️ Überspringe bereits katalogisiertes Bild: {task_id}"
+                        )
+                        continue
                     saga_tasks.append(process_with_limit(task_id, img_path))
 
-            results = await asyncio.gather(*saga_tasks, return_exceptions=True)
-            for r in results:
-                if isinstance(r, Exception):
-                    logger.error(f"SAGA fehlgeschlagen: {r}")
+            results = await asyncio.gather(*saga_tasks)
+            completed_results = [
+                result
+                for result in results
+                if isinstance(result, dict) and result.get("status") == "COMPLETED"
+            ]
+            if completed_results:
+                write_catalog_batch(completed_results)
+                for result in completed_results:
+                    result["saga"]["state"] = SAGA_COMMITTED
+                    os.remove(result["image_path"])
+                    logger.info(f"🗑️ {result['image_path']} gelöscht.")
 
-            os.remove(csv_list_file)
-            logger.info(f"🗑️ CSV-Datei {csv_list_file} gelöscht.")
+            failed_paths = [
+                result["source_path"]
+                for result in results
+                if result.get("status") == "FAILED"
+            ]
+            if failed_paths:
+                retry_path = f"{csv_list_file}.retry"
+                with open(retry_path, "w", newline="") as retry_file:
+                    writer = csv.writer(retry_file)
+                    writer.writerows([[path] for path in failed_paths])
+                os.replace(retry_path, csv_list_file)
+                logger.warning(
+                    f"🔁 {len(failed_paths)} Bild(er) bleiben für einen Retry in {csv_list_file}."
+                )
+            else:
+                os.remove(csv_list_file)
+                logger.info(f"🗑️ {csv_list_file} gelöscht.")
 
         await asyncio.sleep(POLL_INTERVAL)
 

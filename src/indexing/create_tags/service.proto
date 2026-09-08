@@ -4,11 +4,7 @@ package saga_tags;
 
 // Der gRPC-Service, den jeder der 3 Worker implementieren muss
 service WorkerService {
-  // 1. Der Vorwärts-Schritt: Führt die lokale DB-Transaktion aus
   rpc ProcessTask (TaskRequest) returns (TaskResponse);
-  
-  // 2. Der Rückwärts-Schritt: Macht die lokale DB-Transaktion im Fehlerfall rückgängig
-  rpc CompensateTask (CompensateRequest) returns (CompensateResponse);
 }
 
 // Die Anfrage für die Verarbeitung einer Aufgabe
@@ -21,15 +17,9 @@ message TaskRequest {
 message TaskResponse {
   string status = 1;      // COMPLETED, FAILED, oder ALREADY_EXISTS
   string db_record_id = 2; // Die ID des erzeugten Datenbank-Eintrags für das Saga-Log
+  string metadata_json = 3;
+  repeated float embedding = 4;
+  string thumbnail_path = 5;
 }
 
 // Der Kompensations-Befehl vom Orchestrator
-message CompensateRequest {
-  string task_id = 1;     // Welche Aufgabe soll rückgängig gemacht werden?
-  string db_record_id = 2; // Die exakte Record-ID zur Verifizierung
-}
-
-// Die Bestätigung der erfolgreichen Kompensation
-message CompensateResponse {
-  string status = 1;      // ROLLED_BACK oder NOT_FOUND
-}

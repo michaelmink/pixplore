@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -13,6 +13,10 @@ COPY . .
 RUN uv run python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. service.proto
 
 RUN uv run opentelemetry-bootstrap -a requirements | uv pip install -r -
+
+ENV UV_CACHE_DIR=/tmp/.cache/uv
+
+RUN chown -R 1000:1000 /app
 
 USER 1000:1000
 

@@ -15,7 +15,7 @@ Startet alle Pixplore-Services lokal als Docker-Container. Ersetzt docker-compos
 │                        ▲                           │
 │  ┌────────────────────┐│┌─────────────────────┐    │
 │  │ worker_tags  :50051│││ worker_embeddings   │    │
-│  │ worker_thumb :50052│││ (chromadb)          │    │
+│  │ worker_thumb :50052│││ (returns results)   │    │
 │  └────────────────────┘│└─────────────────────┘    │
 │                        │                           │
 │  ┌─────────────┐      │  ┌──────────────┐         │
@@ -76,7 +76,7 @@ pulumi stack output
 | text2vec | 8090 | Text-zu-Embedding Modell |
 | worker_tags | 50051 | gRPC: Bild-Tagging |
 | worker_thumbnails | 50052 | gRPC: Thumbnail-Erzeugung |
-| worker_embeddings | — | gRPC: Bild-Embeddings → ChromaDB |
+| worker_embeddings | — | gRPC: Bild-Embeddings zurückgeben |
 | controller | — | Orchestriert Worker bei neuen Bildern |
 | otel-collector | 4317/4318 | OpenTelemetry Collector (OTLP gRPC + HTTP) |
 | jaeger | 16686 | Distributed Tracing UI |
@@ -149,7 +149,19 @@ from services.java_api import java_api_container
 Alle Container hängen am Docker-Network `pixplore`. Dadurch können sie sich gegenseitig über den Container-Namen erreichen:
 
 - `TEXT2VEC_URL=http://text2vec:8081` → findet den text2vec Container
-- `CHROMA_HOST=chromadb` → findet den chromadb Container
+- `chromadb` wird lokal vom Frontend über den gemeinsamen VectorDB-Pfad verwendet
+
+## Verarbeitungskatalog
+
+Die Worker schreiben nicht direkt in ChromaDB. Der Controller sammelt die drei gRPC-Ergebnisse pro Bild und schreibt nach einem CSV-Lauf einen unveränderlichen Parquet-Batch:
+
+```text
+/tmp/images/catalog/
+├── batch-<timestamp>.parquet
+└── manifest.json
+```
+
+Die Parquet-Zeilen enthalten Bild-ID, Content-Hash, Metadaten, Embedding und Thumbnail-Pfad. Bereits katalogisierte Bild-IDs werden beim nächsten Lauf übersprungen. ChromaDB bleibt lokal der Suchindex; der persistente Katalog liegt in den Parquet-Batches.
 
 ## Encryption
 

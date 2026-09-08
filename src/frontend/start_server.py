@@ -16,39 +16,8 @@ import requests
 BASE_PATH = os.getenv("BASE_PATH", "/tmp/images")
 THUMBNAIL_PATH = os.path.join(BASE_PATH, "thumbnails")
 TEXT2VEC_URL = os.getenv("TEXT2VEC_URL", "http://localhost:8081")
-
-# SQLite doesn't work over GCS FUSE — copy vectordb to a local writable path if needed.
-_chroma_src = os.path.join(BASE_PATH, "vectordb")
-LOCAL_CHROMA_PATH = "/tmp/local_vectordb"
-if os.access(_chroma_src, os.W_OK):
-    CHROMA_PATH = _chroma_src
-else:
-    if not os.path.exists(LOCAL_CHROMA_PATH):
-        shutil.copytree(_chroma_src, LOCAL_CHROMA_PATH)
-    CHROMA_PATH = LOCAL_CHROMA_PATH
-
-
-# chromadb client
-@st.cache_resource(ttl=60)
-def get_chromadb_data():
-    client = chromadb.PersistentClient(path=CHROMA_PATH)
-    print(f"Using ChromaDB PersistentClient: {CHROMA_PATH}")
-    collection = client.get_collection("image_tags")
-    results = collection.get(include=["metadatas", "documents"])
-    print(f"Loaded {len(results['ids'])} images from ChromaDB collection 'image_tags'")
-    metadata = {}
-    for doc_id, meta in zip(results["ids"], results["metadatas"]):
-        metadata[doc_id] = meta
-    return metadata
-
-
-image_metadata = get_chromadb_data()
-
-
-@st.cache_resource(ttl=60)
-def get_embedding_collection():
-    client = chromadb.PersistentClient(path=CHROMA_PATH)
-    return client.get_collection("image_embeddings")
+CHROMA_HOST = os.getenv("CHROMA_HOST", "")
+CHROMA_URL = os.getenv("CHROMA_URL", "")
 
 
 def _get_id_token(audience: str) -> str | None:
@@ -67,6 +36,59 @@ def _get_id_token(audience: str) -> str | None:
     return None
 
 
+def _get_chroma_client():
+    """Return HttpClient for Cloud Run/GKE, or PersistentClient for local."""
+    if CHROMA_URL:
+        # Cloud Run: full URL like https://chromadb-xxxxx-ew.a.run.app
+        from urllib.parse import urlparse
+
+        parsed = urlparse(CHROMA_URL)
+        ssl = parsed.scheme == "https"
+        port = parsed.port or (443 if ssl else 8000)
+        headers = {}
+        token = _get_id_token(CHROMA_URL)
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        return chromadb.HttpClient(
+            host=parsed.hostname, port=port, ssl=ssl, headers=headers
+        )
+
+    if CHROMA_HOST:
+        return chromadb.HttpClient(host=CHROMA_HOST, port=8000)
+
+    _chroma_src = os.path.join(BASE_PATH, "vectordb")
+    local_chroma_path = "/tmp/local_vectordb"
+    if os.access(_chroma_src, os.W_OK):
+        chroma_path = _chroma_src
+    else:
+        if not os.path.exists(local_chroma_path):
+            shutil.copytree(_chroma_src, local_chroma_path)
+        chroma_path = local_chroma_path
+    return chromadb.PersistentClient(path=chroma_path)
+
+
+# chromadb client
+@st.cache_resource(ttl=60)
+def get_chromadb_data():
+    client = _get_chroma_client()
+    collection = client.get_collection("image_tags")
+    results = collection.get(include=["metadatas", "documents"])
+    print(f"Loaded {len(results['ids'])} images from ChromaDB collection 'image_tags'")
+    metadata = {}
+    for doc_id, meta in zip(results["ids"], results["metadatas"]):
+        metadata[doc_id] = meta
+    return metadata
+
+
+image_metadata = get_chromadb_data()
+
+
+@st.cache_resource(ttl=60)
+def get_embedding_collection():
+    client = _get_chroma_client()
+    return client.get_collection("image_embeddings")
+
+
 def search_by_text(query: str, n_results: int = 50):
     """Get text embedding from text2vec service and query ChromaDB for similar images."""
     try:
@@ -79,7 +101,7 @@ def search_by_text(query: str, n_results: int = 50):
             f"{TEXT2VEC_URL}/embed_text",
             json={"text": query},
             headers=headers,
-            timeout=30,
+            timeout=180,
         )
         resp.raise_for_status()
         text_embedding = resp.json()["embedding"]
@@ -150,11 +172,15 @@ search_results = st.session_state.get("search_results")
 # -------------------------------
 # Alle Bilder laden
 # -------------------------------
-all_image_files = [
-    f
-    for f in os.listdir(THUMBNAIL_PATH)
-    if f.lower().endswith((".png", ".jpg", ".jpeg"))
-]
+all_image_files = (
+    [
+        f
+        for f in os.listdir(THUMBNAIL_PATH)
+        if f.lower().endswith((".png", ".jpg", ".jpeg"))
+    ]
+    if os.path.isdir(THUMBNAIL_PATH)
+    else []
+)
 
 # Build set of matching filenames from text search (ranked by similarity)
 search_ranked_names = None

@@ -18,7 +18,8 @@ controller_image = docker.Image(
 controller_container = docker.Container(
     "controller",
     name="controller",
-    image=controller_image.repo_digest,
+    image=controller_image.image_name,
+    user="0:0",
     envs=[
         "WATCH_DIR=/tmp/images",
         "CONCURRENCY=5",
@@ -37,6 +38,8 @@ controller_container = docker.Container(
             worker_tags_container,
             worker_thumbnails_container,
             worker_embeddings_container,
+            controller_image,
+            network,
         ]
     ),
 )

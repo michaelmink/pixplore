@@ -36,10 +36,6 @@ services:
       - "50051:50051"
     volumes:
       - /tmp/images:/tmp/images
-    environment:
-      - CHROMA_HOST=chromadb
-    depends_on:
-      - chromadb
 
   worker_thumbnails:
     build: ./src/indexing/create_thumbnails
@@ -55,10 +51,6 @@ services:
       replicas: 5
     volumes:
       - /tmp/images:/tmp/images
-    environment:
-      - CHROMA_HOST=chromadb
-    depends_on:
-      - chromadb
 
   controller:
     build: ./src/controller

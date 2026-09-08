@@ -20,12 +20,5 @@ async def test():
     resp2 = await worker.ProcessTasks(req, ctx)
     print(f"Duplikat: {resp2.status}")
 
-    # Kompensation testen
-    comp_req = service_pb2.CompensateRequest(
-        task_id="test-1", db_record_id="rec_TestWorker_test-1"
-    )
-    resp3 = await worker.CompensateTask(comp_req, ctx)
-    print(f"Compensate: {resp3.status}")
-
 
 asyncio.run(test())

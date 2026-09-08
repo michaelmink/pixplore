@@ -36,16 +36,21 @@ class WorkerService(service_pb2_grpc.WorkerServiceServicer):
                 img.save(thumbnail_path)
                 print(f"✅ Thumbnail erstellt: {thumbnail_path}")
                 return service_pb2.TaskResponse(
-                    status="COMPLETED", db_record_id=task_id
+                    status="COMPLETED",
+                    db_record_id=task_id,
+                    thumbnail_path=thumbnail_path,
                 )
         except Exception as e:
             print(f"❌ Fehler beim Erstellen des Thumbnails für {img_path}: {e}")
             return service_pb2.TaskResponse(status="FAILED", db_record_id=task_id)
 
 
-if __name__ == "__main__":
+async def main():
     server = serve()
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(server.start())
+    await server.start()
     print("gRPC-Server Worker Thumbnails läuft auf Port 50052...")
-    loop.run_forever()
+    await server.wait_for_termination()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

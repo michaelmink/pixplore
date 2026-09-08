@@ -1,10 +1,10 @@
 import os
 import asyncio
 import logging
+import json
 import grpc
 from PIL import Image
 from PIL.ExifTags import TAGS
-import chromadb
 
 import service_pb2
 import service_pb2_grpc
@@ -16,10 +16,7 @@ logger = logging.getLogger(__name__)
 
 class TagWorker(service_pb2_grpc.WorkerServiceServicer):
     def __init__(self):
-        # chromadb connection
-        CHROMA_HOST = os.getenv("CHROMA_HOST", "localhost")
-        client = chromadb.HttpClient(host=CHROMA_HOST, port=8000)
-        self.collection = client.get_or_create_collection("image_tags")
+        pass
 
     async def ProcessTask(self, request, context):
         logger.info(f"Got task: {request.task_id} | img_path: {request.img_path}")
@@ -49,22 +46,15 @@ class TagWorker(service_pb2_grpc.WorkerServiceServicer):
                         metadata["gps_lat"] = "0"
                         metadata["gps_lon"] = "0"
 
-            # write to db
-            self.collection.add(
-                ids=[image_file_name], metadatas=[metadata], documents=[image_file_name]
-            )
-
             return service_pb2.TaskResponse(
-                status="COMPLETED", db_record_id=image_file_name
+                status="COMPLETED",
+                db_record_id=image_file_name,
+                metadata_json=json.dumps(metadata, sort_keys=True),
             )
 
         except Exception as e:
             logger.error(f"Error reading EXIF data: {e}")
             return service_pb2.TaskResponse(status="FAILED", db_record_id="")
-
-    async def CompensateTask(self, request, context):
-        logger.info(f"Compensate: {request.task_id}")
-        return service_pb2.CompensateResponse(status="ROLLED_BACK")
 
 
 async def main():

@@ -14,11 +14,12 @@ frontend_image = docker.Image(
 frontend_container = docker.Container(
     "frontend",
     name="frontend",
-    image=frontend_image.repo_digest,
+    image=frontend_image.image_name,
     ports=[docker.ContainerPortArgs(internal=8501, external=8501)],
     envs=[
         "BASE_PATH=/tmp/images",
         "TEXT2VEC_URL=http://text2vec:8081",
+        "CHROMA_HOST=chromadb",
         "OTEL_SERVICE_NAME=frontend",
         "OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317",
     ],
@@ -28,5 +29,7 @@ frontend_container = docker.Container(
         )
     ],
     networks_advanced=[docker.ContainerNetworksAdvancedArgs(name=network.name)],
-    opts=pulumi.ResourceOptions(depends_on=[java_api_container, text2vec_container]),
+    opts=pulumi.ResourceOptions(
+        depends_on=[frontend_image, java_api_container, text2vec_container, network]
+    ),
 )

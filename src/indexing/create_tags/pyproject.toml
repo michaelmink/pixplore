@@ -9,7 +9,6 @@ dependencies = [
     "grpcio-tools",
     "aiosqlite",
     "Pillow",
-    "chromadb",
     "opentelemetry-distro",
     "opentelemetry-exporter-otlp",
 ]

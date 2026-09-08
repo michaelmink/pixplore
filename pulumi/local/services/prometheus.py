@@ -24,5 +24,5 @@ prometheus_container = docker.Container(
         )
     ],
     networks_advanced=[docker.ContainerNetworksAdvancedArgs(name=network.name)],
-    opts=pulumi.ResourceOptions(depends_on=[otel_collector_container]),
+    opts=pulumi.ResourceOptions(depends_on=[otel_collector_container, network]),
 )

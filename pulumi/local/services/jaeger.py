@@ -1,4 +1,5 @@
 # In einer neuen Datei services/jaeger.py
+import pulumi
 import pulumi_docker as docker
 from services import network
 
@@ -15,4 +16,5 @@ jaeger_container = docker.Container(
     ],
     envs=["COLLECTOR_OTLP_ENABLED=true"],
     networks_advanced=[docker.ContainerNetworksAdvancedArgs(name=network.name)],
+    opts=pulumi.ResourceOptions(depends_on=[network]),
 )

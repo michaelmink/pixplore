@@ -11,11 +11,3 @@ response = stub.ProcessTask(
     service_pb2.TaskRequest(task_id="test-001", payload="Mein erster Task")
 )
 print(f"Status: {response.status}, Record-ID: {response.db_record_id}")
-
-# CompensateTask aufrufen (Rollback)
-response = stub.CompensateTask(
-    service_pb2.CompensateRequest(
-        task_id="test-001", db_record_id="rec_TagWorker_test-001"
-    )
-)
-print(f"Kompensation: {response.status}")

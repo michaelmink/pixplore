@@ -9,6 +9,7 @@ dependencies = [
     "grpcio-tools",
     "chromadb",
     "aiohttp",
+    "pyarrow",
     "opentelemetry-distro",
     "opentelemetry-exporter-otlp",
 ]
