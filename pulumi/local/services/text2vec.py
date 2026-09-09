@@ -17,6 +17,7 @@ text2vec_container = docker.Container(
     envs=[
         "OTEL_SERVICE_NAME=text2vec",
         "OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317",
+        "OTEL_LOGS_EXPORTER=none",
     ],
     networks_advanced=[docker.ContainerNetworksAdvancedArgs(name=network.name)],
     opts=pulumi.ResourceOptions(depends_on=[text2vec_image, network]),

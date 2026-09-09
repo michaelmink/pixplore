@@ -25,6 +25,7 @@ controller_container = docker.Container(
         "CONCURRENCY=5",
         "OTEL_SERVICE_NAME=controller",
         "OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317",
+        "OTEL_LOGS_EXPORTER=none",
     ],
     volumes=[
         docker.ContainerVolumeArgs(

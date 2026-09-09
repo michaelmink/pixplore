@@ -22,6 +22,7 @@ frontend_container = docker.Container(
         "CHROMA_HOST=chromadb",
         "OTEL_SERVICE_NAME=frontend",
         "OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317",
+        "OTEL_LOGS_EXPORTER=none",
     ],
     volumes=[
         docker.ContainerVolumeArgs(

@@ -18,6 +18,7 @@ import service_pb2_grpc
 WATCH_DIR = os.getenv("WATCH_DIR", "/tmp/images")
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "5"))
 CATALOG_DIR = Path(os.getenv("CATALOG_DIR", os.path.join(WATCH_DIR, "catalog")))
+MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
 
 # Logger-Formatierung für gute Lesbarkeit auf der Hörsaal-Leinwand
 logging.basicConfig(
@@ -210,8 +211,10 @@ def catalog_image_ids():
 async def watch_and_process():
     """Überwacht WATCH_DIR auf neue JPG-Dateien und verarbeitet sie."""
     logger.info(
-        f"👀 Listener gestartet. Überwache {WATCH_DIR} (alle {POLL_INTERVAL}s)..."
+        f"👀 Listener gestartet. Überwache {WATCH_DIR} (alle {POLL_INTERVAL}s, max. Retries: {MAX_RETRIES})..."
     )
+    retry_counts = {}
+    skipped_image_ids = set()
 
     while True:
         csv_list_file = os.path.join(WATCH_DIR, "list_files.csv")
@@ -253,6 +256,11 @@ async def watch_and_process():
                             f"⏭️ Überspringe bereits katalogisiertes Bild: {task_id}"
                         )
                         continue
+                    if task_id in skipped_image_ids:
+                        logger.info(
+                            f"⏭️ Überspringe dauerhaft fehlgeschlagenes Bild: {task_id}"
+                        )
+                        continue
                     saga_tasks.append(process_with_limit(task_id, img_path))
 
             results = await asyncio.gather(*saga_tasks)
@@ -267,12 +275,37 @@ async def watch_and_process():
                     result["saga"]["state"] = SAGA_COMMITTED
                     os.remove(result["image_path"])
                     logger.info(f"🗑️ {result['image_path']} gelöscht.")
+                    retry_counts.pop(result["source_path"], None)
 
-            failed_paths = [
-                result["source_path"]
-                for result in results
-                if result.get("status") == "FAILED"
-            ]
+            failed_paths = []
+            for result in results:
+                if isinstance(result, dict) and result.get("status") == "FAILED":
+                    src_path = result["source_path"]
+                    task_id = os.path.basename(src_path)
+                    count = retry_counts.get(src_path, 0) + 1
+                    retry_counts[src_path] = count
+
+                    if count < MAX_RETRIES:
+                        logger.warning(
+                            f"⚠️ Versuch {count}/{MAX_RETRIES} fehlgeschlagen für {src_path}. Erneuter Versuch folgt."
+                        )
+                        failed_paths.append(src_path)
+                    else:
+                        logger.error(
+                            f"❌ Max. Retries ({MAX_RETRIES}) erreicht für {src_path}. Bild wird übersprungen."
+                        )
+                        skipped_image_ids.add(task_id)
+                        retry_counts.pop(src_path, None)
+                        local_file = os.path.join(WATCH_DIR, task_id)
+                        if os.path.exists(local_file):
+                            try:
+                                os.remove(local_file)
+                                logger.info(f"🗑️ Lokale Datei {local_file} gelöscht.")
+                            except Exception as e:
+                                logger.error(
+                                    f"Fehler beim Löschen von {local_file}: {e}"
+                                )
+
             if failed_paths:
                 retry_path = f"{csv_list_file}.retry"
                 with open(retry_path, "w", newline="") as retry_file:

@@ -18,6 +18,7 @@ worker_tags_container = docker.Container(
     envs=[
         "OTEL_SERVICE_NAME=worker_tags",
         "OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317",
+        "OTEL_LOGS_EXPORTER=none",
     ],
     volumes=[
         docker.ContainerVolumeArgs(
@@ -45,6 +46,7 @@ worker_thumbnails_container = docker.Container(
     envs=[
         "OTEL_SERVICE_NAME=worker_thumbnails",
         "OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317",
+        "OTEL_LOGS_EXPORTER=none",
     ],
     volumes=[
         docker.ContainerVolumeArgs(
@@ -73,6 +75,7 @@ worker_embeddings_container = docker.Container(
     envs=[
         "OTEL_SERVICE_NAME=worker_embeddings",
         "OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317",
+        "OTEL_LOGS_EXPORTER=none",
     ],
     volumes=[
         docker.ContainerVolumeArgs(

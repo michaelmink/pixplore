@@ -270,21 +270,13 @@ gcp.cloudrunv2.ServiceIamMember(
     member=f"user:{ADMIN_EMAIL}",
 )
 
-# Private frontend access for the selected Google accounts
+# Public frontend access (protected at the DNS/Zero Trust layer by Cloudflare Access)
 gcp.cloudrunv2.ServiceIamMember(
-    "frontend-invoker-admin",
+    "frontend-public",
     location=REGION,
     name=frontend_service.name,
     role="roles/run.invoker",
-    member=f"user:{ADMIN_EMAIL}",
-)
-
-gcp.cloudrunv2.ServiceIamMember(
-    "frontend-invoker-partner",
-    location=REGION,
-    name=frontend_service.name,
-    role="roles/run.invoker",
-    member=f"user:{PARTNER_EMAIL}",
+    member="allUsers",
 )
 
 # ---------------------------------------------------------------------------
