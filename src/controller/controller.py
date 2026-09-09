@@ -132,6 +132,7 @@ async def process_image_pipeline(task_id: str, img_path: str):
 
         return {
             "status": "COMPLETED",
+            "source_path": source_path,
             "image_path": img_path,
             "metadata": json.loads(tag_response.metadata_json),
             "embedding": list(embedding_response.embedding),
@@ -275,7 +276,8 @@ async def watch_and_process():
                     result["saga"]["state"] = SAGA_COMMITTED
                     os.remove(result["image_path"])
                     logger.info(f"🗑️ {result['image_path']} gelöscht.")
-                    retry_counts.pop(result["source_path"], None)
+                    if "source_path" in result:
+                        retry_counts.pop(result["source_path"], None)
 
             failed_paths = []
             for result in results:
