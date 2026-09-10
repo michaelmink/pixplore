@@ -12,4 +12,6 @@ dependencies = [
     "pyarrow",
     "opentelemetry-distro",
     "opentelemetry-exporter-otlp",
+    "gcsfs",
+    "pandas"
 ]

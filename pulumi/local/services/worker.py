@@ -72,6 +72,7 @@ worker_embeddings_container = docker.Container(
     "worker-embeddings",
     name="worker_embeddings",
     image=worker_embeddings_image.image_name,
+    ports=[docker.ContainerPortArgs(internal=50053, external=50053)],
     envs=[
         "OTEL_SERVICE_NAME=worker_embeddings",
         "OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317",
