@@ -9,24 +9,34 @@ from pathlib import Path
 import grpc
 import aiohttp
 import pyarrow as pa
-import pyarrow.parquet as pq
 import gcsfs
-import pyarrow.dataset as ds
+from pyiceberg.catalog.sql import SqlCatalog
 
 # Importiere die vom Dockerfile generierten Protobuf-Stubs
 import service_pb2
 import service_pb2_grpc
 
 WATCH_DIR = os.getenv("WATCH_DIR", "/tmp/images")
-CATALOG_DIR = Path(os.getenv("CATALOG_DIR", os.path.join(WATCH_DIR, "catalog")))
 THUMBNAILS_DIR = Path(
     os.getenv("THUMBNAILS_DIR", os.path.join(WATCH_DIR, "thumbnails"))
 )
 
-POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "5"))
-CONSIDER_EXISTING_FROM_REMOTE_STORAGE = False
+# Iceberg-Katalog: SQLite-Zeiger lokal, Daten/Metadaten auf GCS
+ICEBERG_CATALOG_URI = os.getenv(
+    "ICEBERG_CATALOG_URI",
+    f"sqlite:///{os.path.join(WATCH_DIR, 'iceberg_catalog.db')}",
+)
+ICEBERG_WAREHOUSE = os.getenv("ICEBERG_WAREHOUSE", "gs://pixplore-bucket/warehouse")
+GCS_PROJECT = os.getenv("GCS_PROJECT", "pixplore-503406")
+THUMBNAIL_GCS_PREFIX = os.getenv(
+    "THUMBNAIL_GCS_PREFIX", "gs://pixplore-bucket/thumbnails"
+)
+ICEBERG_NAMESPACE = "catalog"
+ICEBERG_TABLE = f"{ICEBERG_NAMESPACE}.images"
 
-# Logger-Formatierung für gute Lesbarkeit auf der Hörsaal-Leinwand
+POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "5"))
+CONSIDER_EXISTING_FROM_REMOTE_STORAGE = True
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - \033[1;34m[Orchestrator]\033[0m %(message)s",
@@ -34,28 +44,49 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 CONCURRENCY = int(os.getenv("CONCURRENCY", "5"))
-PROCESSING_BATCH_SIZE = 5
+PROCESSING_BATCH_SIZE = 100
 
 # Die gRPC- und Java-REST-Endpunkte
-LOCAL = True
-if LOCAL:
-    JAVA_API_URL = "http://localhost:8080"
-    WORKERS = {
-        "Worker_Tags": "localhost:50051",
-        "Worker_Thumbnails": "localhost:50052",
-        "Worker_Embeddings": "localhost:50053",
-    }
-else:
-    JAVA_API_URL = os.getenv("JAVA_API_URL", "http://java_api:8080")
-    WORKERS = {
-        "Worker_Tags": os.getenv("WORKER_TAGS_ADDR", "worker_tags:50051"),
-        "Worker_Thumbnails": os.getenv(
-            "WORKER_THUMBNAILS_ADDR", "worker_thumbnails:50052"
-        ),
-        "Worker_Embeddings": os.getenv(
-            "WORKER_EMBEDDINGS_ADDR", "dns:///worker_embeddings:50053"
-        ),
-    }
+JAVA_API_URL = os.getenv("JAVA_API_URL", "http://localhost:8080")
+WORKERS = {
+    "Worker_Tags": os.getenv("WORKER_TAGS_ADDR", "localhost:50051"),
+    "Worker_Thumbnails": os.getenv("WORKER_THUMBNAILS_ADDR", "localhost:50052"),
+    "Worker_Embeddings": os.getenv("WORKER_EMBEDDINGS_ADDR", "localhost:50053"),
+}
+
+# Schema der Katalog-Tabelle
+CATALOG_SCHEMA = pa.schema(
+    [
+        ("image_id", pa.string()),
+        ("content_hash", pa.string()),
+        ("filepath_orig", pa.string()),
+        ("metadata", pa.string()),
+        ("embedding", pa.list_(pa.float32())),
+        ("thumbnail_uri", pa.string()),
+        ("processed_at", pa.timestamp("us", tz="UTC")),
+    ]
+)
+
+_catalog = None
+
+
+def get_catalog():
+    global _catalog
+    if _catalog is None:
+        _catalog = SqlCatalog(
+            "pixplore",
+            **{
+                "uri": ICEBERG_CATALOG_URI,
+                "warehouse": ICEBERG_WAREHOUSE,
+            },
+        )
+    return _catalog
+
+
+def init_catalog():
+    catalog = get_catalog()
+    catalog.create_namespace_if_not_exists(ICEBERG_NAMESPACE)
+    catalog.create_table_if_not_exists(ICEBERG_TABLE, schema=CATALOG_SCHEMA)
 
 
 async def execute_forward_step(
@@ -134,7 +165,7 @@ async def process_image_pipeline(task_id: str, img_path: str):
     if os.path.exists(img_path_local):
         state.is_downloaded()
     else:
-        state.is_retry()
+        return state.is_retry()
 
     # gRPC-Request-Objekt bauen
     request = service_pb2.TaskRequest(task_id=task_id, img_path=img_path_local)
@@ -152,14 +183,15 @@ async def process_image_pipeline(task_id: str, img_path: str):
 
     try:
         # Scatter-Phase: Alle 3 Worker arbeiten zeitgleich
-        # return_exceptions=False sorgt für sofortigen Abbruch beim ersten Fehler!
+        # return_exceptions=True sorgt dafür, dass alle Aufgaben ausgeführt werden, auch wenn einige fehlschlagen. Fehler werden als Ausnahmen zurückgegeben.
         tag_response, thumbnail_response, embedding_response = await asyncio.gather(
-            *tasks, return_exceptions=False
+            *tasks, return_exceptions=True
         )
-        if any(
-            response.status != "COMPLETED"
-            for response in (tag_response, thumbnail_response, embedding_response)
-        ):
+        responses = (tag_response, thumbnail_response, embedding_response)
+        if any(isinstance(r, Exception) for r in responses):
+            state.is_retry()
+            raise RuntimeError(f"Worker failure for {task_id}")
+        if any(r.status != "COMPLETED" for r in responses):
             state.is_retry()
             raise RuntimeError(f"Worker failure for {task_id}")
 
@@ -190,7 +222,10 @@ async def process_image_pipeline(task_id: str, img_path: str):
 
 
 def write_catalog_batch(results):
-    """Persist completed worker results as one immutable Parquet batch."""
+    """Upload thumbnails to GCS, then upsert catalog rows (upload-before-commit)."""
+    # ohne project=, sonst weicht gcsfs bei User-ADC auf den VM-Metadata-SA aus
+    fs = gcsfs.GCSFileSystem()
+    prefix = THUMBNAIL_GCS_PREFIX.rstrip("/")
     rows = []
     for result in results:
         image_path_local = result["image_path_local"]
@@ -199,6 +234,11 @@ def write_catalog_batch(results):
         with open(image_path_local, "rb") as image_file:
             content_hash = hashlib.sha256(image_file.read()).hexdigest()
 
+        # Thumbnail VOR dem Upsert nach GCS -> eine Zeile referenziert nie eine fehlende Datei
+        thumb_name = os.path.basename(result["thumbnail_path"])
+        thumbnail_uri = f"{prefix}/{thumb_name}"
+        fs.put(result["thumbnail_path"], thumbnail_uri)
+
         rows.append(
             {
                 "image_id": image_id,
@@ -206,41 +246,24 @@ def write_catalog_batch(results):
                 "filepath_orig": result["image_path"],
                 "metadata": json.dumps(result["metadata"], sort_keys=True),
                 "embedding": result["embedding"],
-                "thumbnail_path": result["thumbnail_path"],
-                "processed_at": datetime.now(timezone.utc).isoformat(),
+                "thumbnail_uri": thumbnail_uri,
+                "processed_at": datetime.now(timezone.utc),
             }
         )
 
-    CATALOG_DIR.mkdir(parents=True, exist_ok=True)
-    batch_name = (
-        f"batch-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}.parquet"
-    )
-    batch_path = CATALOG_DIR / batch_name
-    # compression format for the Parquet file
-    temporary_path = CATALOG_DIR / f".{batch_name}.tmp"
-    table = pa.Table.from_pylist(rows)
-    pq.write_table(table, temporary_path, compression="zstd")
-    os.replace(temporary_path, batch_path)
-
-    # copy to gcs
-    fs = gcsfs.GCSFileSystem(project="pixplore-503406")
-    gcs_path = f"gs://pixplore-bucket/catalog/{batch_name}"
-    fs.put(str(batch_path), gcs_path)
+    # Alle Thumbnails liegen jetzt auf GCS -> atomarer Upsert
+    arrow_table = pa.Table.from_pylist(rows, schema=CATALOG_SCHEMA)
+    table = get_catalog().load_table(ICEBERG_TABLE)
+    # Dedup direkt beim Schreiben über content_hash
+    table.upsert(arrow_table, join_cols=["content_hash"])
+    logger.info("📚 %d Bild(er) in den Iceberg-Katalog upserted.", len(rows))
 
 
 def get_catalog_image_ids():
-    """
-    Download processed.parquet from remote storage (if not exist locally)
-    and return a set of all image_ids in the catalog.
-    """
-    fs = gcsfs.GCSFileSystem(project="pixplore-503406")
-
-    GCS_BASE_PATH = "gs://pixplore-bucket"
-    PARQUET_FILES = fs.ls(f"{GCS_BASE_PATH}/catalog")
-    dataset = ds.dataset(PARQUET_FILES, format="parquet", filesystem=fs)
-    table = dataset.to_table(columns=["image_id"]).to_pandas()
-
-    return set(table["image_id"].to_list())
+    """Return the set of all image_ids already present in the Iceberg catalog."""
+    table = get_catalog().load_table(ICEBERG_TABLE)
+    arrow = table.scan(selected_fields=("image_id",)).to_arrow()
+    return set(arrow.column("image_id").to_pylist())
 
 
 async def process_with_limit(semaphore, task_id, img_path):
@@ -344,6 +367,7 @@ async def watch_and_process():
                     )
 
                 # batch done. next one.
+                await asyncio.sleep(0)
                 logger.info("✅ Batch abgeschlossen. Fahre mit dem nächsten fort.")
 
             os.remove(csv_list_file)
@@ -354,8 +378,9 @@ async def watch_and_process():
 
 if __name__ == "__main__":
     # create folder structure
-    os.makedirs(CATALOG_DIR, exist_ok=True)
     os.makedirs(THUMBNAILS_DIR, exist_ok=True)
+    # Iceberg-Katalog + Tabelle sicherstellen
+    init_catalog()
 
     try:
         asyncio.run(watch_and_process())

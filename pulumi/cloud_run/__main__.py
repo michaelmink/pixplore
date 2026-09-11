@@ -116,11 +116,19 @@ chromadb_service = gcp.cloudrunv2.Service(
                 envs=[
                     gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(
                         name="CATALOG_MODE",
-                        value="parquet",
+                        value="iceberg",
                     ),
                     gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(
-                        name="CATALOG_VERSION",
-                        value=CATALOG_VERSION,
+                        name="ICEBERG_WAREHOUSE",
+                        value=f"gs://{BUCKET_NAME}/warehouse",
+                    ),
+                    gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(
+                        name="GCS_PROJECT",
+                        value=PROJECT,
+                    ),
+                    gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(
+                        name="MATERIALIZE_THUMBNAILS",
+                        value="false",
                     ),
                 ],
                 volume_mounts=[

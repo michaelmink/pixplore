@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-if [ "${CATALOG_MODE:-auto}" = "parquet" ]; then
+if [ "${CATALOG_MODE:-iceberg}" = "parquet" ] || [ "${CATALOG_MODE:-iceberg}" = "iceberg" ]; then
 	python /initialize.py
 	exec chroma run --host 0.0.0.0 --port 8000 --path /tmp/chroma
 fi

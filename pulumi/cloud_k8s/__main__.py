@@ -179,6 +179,19 @@ chromadb_deployment = k8s.apps.v1.Deployment(
                         name="chromadb",
                         image=chromadb_image.ref,
                         ports=[k8s.core.v1.ContainerPortArgs(container_port=8000)],
+                        env=[
+                            k8s.core.v1.EnvVarArgs(
+                                name="CATALOG_MODE", value="iceberg"
+                            ),
+                            k8s.core.v1.EnvVarArgs(
+                                name="ICEBERG_WAREHOUSE",
+                                value=f"gs://{BUCKET_NAME}/warehouse",
+                            ),
+                            k8s.core.v1.EnvVarArgs(name="GCS_PROJECT", value=PROJECT),
+                            k8s.core.v1.EnvVarArgs(
+                                name="MATERIALIZE_THUMBNAILS", value="false"
+                            ),
+                        ],
                         volume_mounts=[
                             k8s.core.v1.VolumeMountArgs(
                                 name="gcs-data",

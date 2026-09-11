@@ -26,6 +26,10 @@ controller_container = docker.Container(
         "OTEL_SERVICE_NAME=controller",
         "OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317",
         "OTEL_LOGS_EXPORTER=none",
+        "JAVA_API_URL=http://java_api:8080",
+        "WORKER_TAGS_ADDR=worker_tags:50051",
+        "WORKER_THUMBNAILS_ADDR=worker_thumbnails:50052",
+        "WORKER_EMBEDDINGS_ADDR=dns:///worker_embeddings:50053",
     ],
     volumes=[
         docker.ContainerVolumeArgs(

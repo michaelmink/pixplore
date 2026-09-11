@@ -6,7 +6,7 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends curl \
   && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir chromadb==1.5.9 pyarrow
+RUN pip install --no-cache-dir chromadb==1.5.9 pyarrow "pyiceberg[gcsfs,sql-sqlite]"
 
 COPY initialize.py /initialize.py
 COPY start.sh /start.sh

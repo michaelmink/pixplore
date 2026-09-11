@@ -13,5 +13,6 @@ dependencies = [
     "opentelemetry-distro",
     "opentelemetry-exporter-otlp",
     "gcsfs",
-    "pandas"
+    "pandas",
+    "pyiceberg[gcsfs,sql-sqlite]"
 ]
