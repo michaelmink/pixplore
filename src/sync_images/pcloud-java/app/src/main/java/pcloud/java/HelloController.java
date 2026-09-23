@@ -3,6 +3,7 @@ package pcloud.java;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.util.HtmlUtils;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.nio.file.Files;
@@ -73,12 +74,16 @@ public class HelloController {
 
         // save to a file in /tmp/images/list_files.csv
         if (trigger_download) {
-            Path outputPath = resolveSafeOutputPath(output_path);
-            Files.createDirectories(outputPath.getParent());
-            Files.write(outputPath, result.getBytes());
+            Path baseDir = Paths.get("/tmp/images").toAbsolutePath().normalize();
+            Path resolvedOutputPath = baseDir.resolve(output_path).normalize();
+            if (!resolvedOutputPath.startsWith(baseDir)) {
+                throw new IllegalArgumentException("Invalid output_path: must be within /tmp/images");
+            }
+            Files.createDirectories(resolvedOutputPath.getParent());
+            Files.write(resolvedOutputPath, result.getBytes());
         }
 
-        return result;
+        return HtmlUtils.htmlEscape(result);
     }
 
     @GetMapping("/remove_local_file")
@@ -92,26 +97,5 @@ public class HelloController {
         System.out.println("removeFile endpoint called.");
 
         return "Remove successful.";
-    }
-
-    private Path resolveSafeOutputPath(String outputPathInput) {
-        Path baseDir = Paths.get("/tmp/images").normalize().toAbsolutePath();
-        Path candidate = Paths.get(outputPathInput);
-
-        // If absolute input is provided, keep only the filename to avoid escaping baseDir
-        if (candidate.isAbsolute()) {
-            candidate = candidate.getFileName();
-        }
-
-        if (candidate == null) {
-            throw new IllegalArgumentException("Invalid output_path");
-        }
-
-        Path resolved = baseDir.resolve(candidate).normalize().toAbsolutePath();
-        if (!resolved.startsWith(baseDir)) {
-            throw new IllegalArgumentException("Invalid output_path");
-        }
-
-        return resolved;
     }
 }
