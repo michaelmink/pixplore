@@ -35,13 +35,21 @@ public class DownloadService {
         Sardine sardine = SardineFactory.begin(username, password);
 
         // Zielverzeichnis erstellen falls nicht vorhanden
-        Path targetDir = Paths.get(downloadPath);
+        Path targetDir = Paths.get(downloadPath).toAbsolutePath().normalize();
         Files.createDirectories(targetDir);
 
         // Dateiname aus dem Pfad extrahieren
         String decodedPath = URLDecoder.decode(path, StandardCharsets.UTF_8);
         String fileName = decodedPath.substring(decodedPath.lastIndexOf('/') + 1);
-        Path targetFile = targetDir.resolve(fileName);
+        // Nur einzelne Dateinamen zulassen (keine Pfadtrenner oder ".." Sequenzen)
+        if (fileName.isEmpty() || fileName.contains("/") || fileName.contains("\\")
+                || fileName.equals(".") || fileName.equals("..")) {
+            throw new IOException("Invalid file name: " + fileName);
+        }
+        Path targetFile = targetDir.resolve(fileName).normalize();
+        if (!targetFile.startsWith(targetDir)) {
+            throw new IOException("Resolved path escapes target directory: " + targetFile);
+        }
         String encodedPath = Arrays.stream(decodedPath.split("/", -1))
             .map(segment -> URLEncoder.encode(segment, StandardCharsets.UTF_8)
                 .replace("+", "%20"))
