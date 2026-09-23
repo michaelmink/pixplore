@@ -54,7 +54,16 @@ public class ListService {
     }
 
     public void removeLocalFile(String filePath) throws IOException {
-        Path targetFile = Paths.get(filePath);
+        Path baseDir = Paths.get("/tmp/images").toAbsolutePath().normalize();
+        Path requestedPath = Paths.get(filePath);
+        Path targetFile = requestedPath.isAbsolute()
+                ? requestedPath.toAbsolutePath().normalize()
+                : baseDir.resolve(requestedPath).normalize();
+
+        if (!targetFile.startsWith(baseDir)) {
+            throw new IllegalArgumentException("Invalid file path: access outside allowed directory is not permitted.");
+        }
+
         if (Files.exists(targetFile)) {
             Files.delete(targetFile);
             System.out.println("Deleted local file: " + targetFile.toAbsolutePath());
