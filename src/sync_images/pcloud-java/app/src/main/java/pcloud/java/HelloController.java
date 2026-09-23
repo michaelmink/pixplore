@@ -73,9 +73,13 @@ public class HelloController {
 
         // save to a file in /tmp/images/list_files.csv
         if (trigger_download) {
-            Path outputPath = Paths.get(output_path);
-            Files.createDirectories(outputPath.getParent());
-            Files.write(outputPath, result.getBytes());
+            Path baseDir = Paths.get("/tmp/images").toAbsolutePath().normalize();
+            Path resolvedOutputPath = baseDir.resolve(output_path).normalize();
+            if (!resolvedOutputPath.startsWith(baseDir)) {
+                throw new IllegalArgumentException("Invalid output_path: must be within /tmp/images");
+            }
+            Files.createDirectories(resolvedOutputPath.getParent());
+            Files.write(resolvedOutputPath, result.getBytes());
         }
 
         return result;
