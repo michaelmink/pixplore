@@ -1,0 +1,31 @@
+[MAIN]
+# Generated gRPC/protobuf stubs are not linted.
+ignore-patterns=.*_pb2\.py,.*_pb2_grpc\.py
+
+# CI does not install the per-service dependencies, so gRPC/protobuf and other
+# runtime members cannot be inspected. Treat these as known dynamic members.
+generated-members=service_pb2.*,service_pb2_grpc.*,grpc.*
+
+[MESSAGES CONTROL]
+disable=
+    missing-module-docstring,
+    missing-class-docstring,
+    missing-function-docstring,
+    import-error,
+    no-name-in-module,
+    duplicate-code,
+    too-few-public-methods,
+    too-many-arguments,
+    too-many-positional-arguments,
+    too-many-locals,
+    too-many-branches,
+    logging-fstring-interpolation,
+    broad-exception-caught,
+    protected-access
+
+[FORMAT]
+max-line-length=120
+
+[SCORE]
+# CI passes when the score is at or above this threshold.
+fail-under=9.0

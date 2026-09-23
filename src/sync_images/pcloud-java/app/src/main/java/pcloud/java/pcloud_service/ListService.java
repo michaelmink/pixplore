@@ -12,13 +12,10 @@ import java.time.LocalDate;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.InvalidPathException;
 
 
 @Service
 public class ListService {
-
-    private static final Path LOCAL_IMAGE_BASE_DIR = Paths.get("/tmp/images").toAbsolutePath().normalize();
 
     @Value("${pcloud.api.username}")
     private String username;
@@ -56,31 +53,17 @@ public class ListService {
         return sb.toString();
     }
 
-    private Path resolveSafeLocalImagePath(String filePath) {
-        try {
-            Path userPath = Paths.get(filePath);
-            Path normalizedUserPath = userPath.normalize();
-
-            Path candidatePath;
-            if (normalizedUserPath.isAbsolute()) {
-                candidatePath = normalizedUserPath;
-            } else {
-                candidatePath = LOCAL_IMAGE_BASE_DIR.resolve(normalizedUserPath).normalize();
-            }
-
-            Path absoluteCandidatePath = candidatePath.toAbsolutePath().normalize();
-            if (!absoluteCandidatePath.startsWith(LOCAL_IMAGE_BASE_DIR)) {
-                throw new IllegalArgumentException("Invalid file path: outside allowed directory");
-            }
-
-            return absoluteCandidatePath;
-        } catch (InvalidPathException e) {
-            throw new IllegalArgumentException("Invalid file path format", e);
-        }
-    }
-
     public void removeLocalFile(String filePath) throws IOException {
-        Path targetFile = resolveSafeLocalImagePath(filePath);
+        Path baseDir = Paths.get("/tmp/images").toAbsolutePath().normalize();
+        Path requestedPath = Paths.get(filePath);
+        Path targetFile = requestedPath.isAbsolute()
+                ? requestedPath.toAbsolutePath().normalize()
+                : baseDir.resolve(requestedPath).normalize();
+
+        if (!targetFile.startsWith(baseDir)) {
+            throw new IllegalArgumentException("Invalid file path: access outside allowed directory is not permitted.");
+        }
+
         if (Files.exists(targetFile)) {
             Files.delete(targetFile);
             System.out.println("Deleted local file: " + targetFile.toAbsolutePath());
