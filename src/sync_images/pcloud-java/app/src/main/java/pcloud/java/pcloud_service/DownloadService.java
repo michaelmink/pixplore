@@ -34,8 +34,16 @@ public class DownloadService {
 
         Sardine sardine = SardineFactory.begin(username, password);
 
-        // Zielverzeichnis erstellen falls nicht vorhanden
-        Path targetDir = Paths.get(downloadPath).toAbsolutePath().normalize();
+        // Zielverzeichnis sicher innerhalb eines erlaubten Basisordners auflösen
+        Path baseDir = Paths.get("/tmp/images").toAbsolutePath().normalize();
+        Path requestedPath = Paths.get(downloadPath).normalize();
+        if (requestedPath.isAbsolute()) {
+            throw new IOException("Absolute download path is not allowed: " + downloadPath);
+        }
+        Path targetDir = baseDir.resolve(requestedPath).normalize();
+        if (!targetDir.startsWith(baseDir)) {
+            throw new IOException("Resolved download path escapes base directory: " + targetDir);
+        }
         Files.createDirectories(targetDir);
 
         // Dateiname aus dem Pfad extrahieren
