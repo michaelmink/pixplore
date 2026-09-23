@@ -1,12 +1,12 @@
 # app.py
+import base64
+import math
+import os
+
+import chromadb
+import requests
 import streamlit as st
 from PIL import Image
-import os
-import math
-import chromadb
-import base64
-import shutil
-import requests
 
 # -------------------------------
 # Konfiguration
@@ -56,15 +56,11 @@ def _get_chroma_client():
     if CHROMA_HOST:
         return chromadb.HttpClient(host=CHROMA_HOST, port=8000)
 
-    _chroma_src = os.path.join(BASE_PATH, "vectordb")
-    local_chroma_path = "/tmp/local_vectordb"
-    if os.access(_chroma_src, os.W_OK):
-        chroma_path = _chroma_src
-    else:
-        if not os.path.exists(local_chroma_path):
-            shutil.copytree(_chroma_src, local_chroma_path)
-        chroma_path = local_chroma_path
-    return chromadb.PersistentClient(path=chroma_path)
+    # chromadb-client ships only the HTTP client; embedded mode needs a server.
+    raise RuntimeError(
+        "No ChromaDB server configured. Set CHROMA_HOST or CHROMA_URL "
+        "(e.g. start the chromadb service from docker-compose)."
+    )
 
 
 # chromadb client
