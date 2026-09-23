@@ -8,10 +8,10 @@ import java.util.Map;
 
 @Service
 public class ChromaService {
-    
+
     private final RestClient restClient;
     private String collectionId = "pixplore";
-    
+
     public ChromaService() {
         this.restClient = RestClient.builder()
             .baseUrl("http://localhost:8000/api/v2")

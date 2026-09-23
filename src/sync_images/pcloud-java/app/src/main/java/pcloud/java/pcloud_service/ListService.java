@@ -30,7 +30,7 @@ public class ListService {
 
         StringBuilder sb = new StringBuilder();
 
-        // filter by date if start_date and end_date are provided   
+        // filter by date if start_date and end_date are provided
         for (DavResource res : resources) {
             // get Date from res.getModified() and convert to LocalDate
             LocalDate resDate = res.getModified().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();

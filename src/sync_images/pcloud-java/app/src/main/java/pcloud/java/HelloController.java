@@ -23,7 +23,7 @@ public class HelloController {
         this.downloadService = downloadService;
         this.listService = listService;
     }
-    
+
     @GetMapping("/health")
     public String health() {
         return "Healthy";
