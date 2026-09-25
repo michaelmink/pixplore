@@ -33,7 +33,7 @@ public class HelloController {
     @GetMapping("/download_file")
     public String downloadBatch(
         @RequestParam(defaultValue = "/Automatic%20Upload/Samsung%20SM-M356B/20250415_173150.jpg") String path,
-        @RequestParam(defaultValue = "/tmp/images") String output_path
+        @RequestParam(defaultValue = "") String output_path
     ) throws IOException {
         // Call the downloadBatch method from the DownloadService class
         downloadService.downloadFile(path, output_path);

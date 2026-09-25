@@ -46,7 +46,8 @@ frontend_image = docker_build.Image(
 
 chromadb_image = docker_build.Image(
     "chromadb-image",
-    context=docker_build.BuildContextArgs(location="../../src/vectordb"),
+    context=docker_build.BuildContextArgs(location="../../src"),
+    dockerfile=docker_build.DockerfileArgs(location="../../src/vectordb/Dockerfile"),
     tags=[f"{REGISTRY}/chromadb:latest"],
     push=True,
     registries=[docker_registry],

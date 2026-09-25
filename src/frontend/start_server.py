@@ -150,7 +150,10 @@ models = sorted(
 )
 
 with st.sidebar.form(key="search_form"):
-    llm_input = st.text_input("Search images (e.g., 'A sunset over mountains')")
+    llm_input = st.text_input(
+        "Search images (e.g., 'A sunset over mountains')",
+        help="Bitte auf Englisch suchen – das Modell versteht nur englische Begriffe.",
+    )
     selected_year = st.selectbox("Jahr", options=["Alle"] + years)
     selected_month = st.selectbox("Monat", options=["Alle"] + months)
     selected_model = st.selectbox("Kamera", options=["Alle"] + models)

@@ -1,14 +1,21 @@
 services:
   java-api:
     build: ./src/sync_images/pcloud-java
+    user: "0:0"
     ports:
       - "8080:8080"
     environment:
       - PCLOUD_USERNAME=${PCLOUD_USERNAME}
       - PCLOUD_PASSWORD=${PCLOUD_PASSWORD}
       - PCLOUD_DOWNLOAD_PATH=/tmp/images
+      - OTEL_SERVICE_NAME=java-api
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+      - OTEL_LOGS_EXPORTER=none
     volumes:
       - /tmp/images:/tmp/images
+    depends_on:
+      - otel-collector
 
   frontend:
     build: ./src/frontend
@@ -19,67 +26,144 @@ services:
     environment:
       - BASE_PATH=/tmp/images
       - TEXT2VEC_URL=http://text2vec:8081
+      - CHROMA_HOST=chromadb
+      - OTEL_SERVICE_NAME=frontend
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_LOGS_EXPORTER=none
     depends_on:
       - java-api
       - text2vec
+      - chromadb
 
   chromadb:
-    build: ./src/vectordb
+    build:
+      context: ./src
+      dockerfile: vectordb/Dockerfile
     ports:
       - "8000:8000"
+    environment:
+      - LOCAL_LIMIT=100
+      - CATALOG_MODE=iceberg
+      - WATCH_DIR=/data
+      - ICEBERG_WAREHOUSE=gs://pixplore-bucket/warehouse
+      - GCS_PROJECT=pixplore-503406
+      - THUMBNAIL_PATH=/data/thumbnails
+      - GOOGLE_APPLICATION_CREDENTIALS=/gcp/adc.json
+      - GRPC_VERBOSITY=ERROR
+      - CHROMA_OTEL_COLLECTION_ENDPOINT=http://otel-collector:4317
+      - CHROMA_OTEL_SERVICE_NAME=chromadb
+      - CHROMA_OTEL_COLLECTION_HEADERS={}
+      - CHROMA_OTEL_GRANULARITY=all
     volumes:
-      - /tmp/images/vectordb:/data
+      - /tmp/images:/data
+      - ${HOME}/.config/gcloud/application_default_credentials.json:/gcp/adc.json:ro
 
   worker_tags:
     build: ./src/indexing/create_tags
     ports:
       - "50051:50051"
+    environment:
+      - OTEL_SERVICE_NAME=worker_tags
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_LOGS_EXPORTER=none
     volumes:
       - /tmp/images:/tmp/images
+    depends_on:
+      - otel-collector
 
   worker_thumbnails:
     build: ./src/indexing/create_thumbnails
+    user: "0:0"
     ports:
       - "50052:50052"
+    environment:
+      - OTEL_SERVICE_NAME=worker_thumbnails
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_LOGS_EXPORTER=none
     volumes:
       - /tmp/images:/tmp/images
       - /tmp/images/thumbnails:/tmp/images/thumbnails
+    depends_on:
+      - otel-collector
 
   worker_embeddings:
     build: ./src/indexing/create_embeddings
     deploy:
       replicas: 5
+    expose:
+      - "50053"
+    environment:
+      - OTEL_SERVICE_NAME=worker_embeddings
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_LOGS_EXPORTER=none
     volumes:
       - /tmp/images:/tmp/images
+    depends_on:
+      - otel-collector
 
   controller:
     build: ./src/controller
+    user: "0:0"
     volumes:
       - /tmp/images:/tmp/images
+      - ${HOME}/.config/gcloud/application_default_credentials.json:/gcp/adc.json:ro
     environment:
       - WATCH_DIR=/tmp/images
       - CONCURRENCY=5
+      - OTEL_SERVICE_NAME=controller
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_LOGS_EXPORTER=none
+      - JAVA_API_URL=http://java-api:8080
+      - WORKER_TAGS_ADDR=worker_tags:50051
+      - WORKER_THUMBNAILS_ADDR=worker_thumbnails:50052
+      - WORKER_EMBEDDINGS_ADDR=dns:///worker_embeddings:50053
+      - GOOGLE_APPLICATION_CREDENTIALS=/gcp/adc.json
     depends_on:
       - java-api
       - worker_tags
       - worker_thumbnails
       - worker_embeddings
+      - chromadb
+      - otel-collector
 
   text2vec:
     build: ./src/text2vec
     ports:
       - "8090:8081"
+    environment:
+      - OTEL_SERVICE_NAME=text2vec
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_LOGS_EXPORTER=none
+    depends_on:
+      - otel-collector
 
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:latest
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.104.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
     ports:
-      - "9090:8080"
+      - "4317:4317"
+      - "4318:4318"
+      - "8889:8889"
     volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
+      - ./pulumi/local/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
 
-volumes:
-  images:
-  data:
+  jaeger:
+    image: jaegertracing/all-in-one:1.58
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686"
+      - "14317:4317"
+      - "14318:4318"
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./pulumi/local/prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - otel-collector

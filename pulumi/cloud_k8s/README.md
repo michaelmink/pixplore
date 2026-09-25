@@ -28,15 +28,10 @@ Deployt frontend, text2vec und ChromaDB auf einen GKE Kubernetes Cluster. Die Wo
 - Pulumi CLI installiert (`curl -fsSL https://get.pulumi.com | sh`)
 - PATH: `export PATH="$HOME/.pulumi/bin:$PATH"` (in `.bashrc` eintragen)
 - `gcloud` CLI authentifiziert
-- GKE Cluster existiert mit GCS FUSE CSI Driver aktiviert:
-  ```bash
-  gcloud container clusters update CLUSTER_NAME --region europe-west3 \
-    --update-addons GcsFuseCsiDriver=ENABLED
-  ```
-- Kubeconfig zeigt auf den Cluster:
-  ```bash
-  gcloud container clusters get-credentials CLUSTER_NAME --region europe-west3
-  ```
+- `gke-gcloud-auth-plugin` installiert (`gcloud components install gke-gcloud-auth-plugin`)
+- Der Infra-Stack `cloud_k8s_infra` ist deployt (erstellt den Autopilot-Cluster
+  inkl. GCS FUSE CSI Driver). Dieser Stack bezieht den Cluster automatisch per
+  StackReference — kein manuelles `get-credentials` mehr nötig.
 
 ## Setup
 
@@ -55,7 +50,8 @@ pulumi stack init prod
 pulumi config set gcp:project pixplore-503406
 pulumi config set gcp:region europe-west3
 pulumi config set bucket-name "DEIN-BUCKET-NAME"
-pulumi config set cluster-name "DEIN-CLUSTER-NAME"
+# optional, falls Infra-Stack nicht 'organization/pixplore-k8s-infra/prod' heißt:
+# pulumi config set infra-stack "organization/pixplore-k8s-infra/prod"
 ```
 
 ## Deployen

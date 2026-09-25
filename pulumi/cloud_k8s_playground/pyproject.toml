@@ -1,0 +1,18 @@
+[project]
+name = "k8s-playground"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "pulumi>=3.0.0",
+    "pulumi-gcp>=8.0.0",
+    "pulumi-kubernetes"
+]
+
+# PyPI zusätzlich zum Firmen-Artifactory: grpcio (cp314-Wheel) liegt nur auf PyPI.
+# unsafe-best-match nötig, da grpcio (alt) auch im Default-Index vorhanden ist.
+[tool.uv]
+index-strategy = "unsafe-best-match"
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"

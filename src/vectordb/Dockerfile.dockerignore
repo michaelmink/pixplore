@@ -1,0 +1,4 @@
+*
+!shared/*.py
+!vectordb/initialize.py
+!vectordb/start.sh

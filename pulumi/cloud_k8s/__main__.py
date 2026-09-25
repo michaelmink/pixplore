@@ -11,9 +11,18 @@ gcp_config = pulumi.Config("gcp")
 PROJECT = gcp_config.require("project")
 REGION = gcp_config.require("region")
 BUCKET_NAME = config.require("bucket-name")
-CLUSTER_NAME = config.require("cluster-name")
 
 REGISTRY = f"{REGION}-docker.pkg.dev/{PROJECT}/pixplore-registry"
+
+# ---------------------------------------------------------------------------
+# Kubernetes Provider aus dem Infra-Stack (StackReference)
+# ---------------------------------------------------------------------------
+INFRA_STACK = config.get("infra-stack") or "organization/pixplore-k8s-infra/prod"
+infra = pulumi.StackReference(INFRA_STACK)
+k8s_provider = k8s.Provider(
+    "pixplore-k8s",
+    kubeconfig=infra.get_output("kubeconfig"),
+)
 
 # ---------------------------------------------------------------------------
 # Artifact Registry
@@ -54,7 +63,8 @@ frontend_image = docker_build.Image(
 
 chromadb_image = docker_build.Image(
     "chromadb-image",
-    context=docker_build.BuildContextArgs(location="../../src/vectordb"),
+    context=docker_build.BuildContextArgs(location="../../src"),
+    dockerfile=docker_build.DockerfileArgs(location="../../src/vectordb/Dockerfile"),
     tags=[f"{REGISTRY}/chromadb:latest"],
     push=True,
     registries=[docker_registry],
@@ -66,6 +76,7 @@ chromadb_image = docker_build.Image(
 ns = k8s.core.v1.Namespace(
     "pixplore",
     metadata=k8s.meta.v1.ObjectMetaArgs(name="pixplore"),
+    opts=pulumi.ResourceOptions(provider=k8s_provider),
 )
 
 # ---------------------------------------------------------------------------
@@ -101,7 +112,7 @@ ksa = k8s.core.v1.ServiceAccount(
             "iam.gke.io/gcp-service-account": gsa.email,
         },
     ),
-    opts=pulumi.ResourceOptions(depends_on=[ns]),
+    opts=pulumi.ResourceOptions(provider=k8s_provider, depends_on=[ns]),
 )
 
 # Workload Identity Binding: KSA darf als GSA agieren
@@ -143,7 +154,7 @@ text2vec_deployment = k8s.apps.v1.Deployment(
             ),
         ),
     ),
-    opts=pulumi.ResourceOptions(depends_on=[ns, ksa]),
+    opts=pulumi.ResourceOptions(provider=k8s_provider, depends_on=[ns, ksa]),
 )
 
 text2vec_svc = k8s.core.v1.Service(
@@ -153,7 +164,7 @@ text2vec_svc = k8s.core.v1.Service(
         selector=text2vec_labels,
         ports=[k8s.core.v1.ServicePortArgs(port=8081, target_port=8081)],
     ),
-    opts=pulumi.ResourceOptions(depends_on=[ns]),
+    opts=pulumi.ResourceOptions(provider=k8s_provider, depends_on=[ns]),
 )
 
 # ---------------------------------------------------------------------------
@@ -221,7 +232,7 @@ chromadb_deployment = k8s.apps.v1.Deployment(
             ),
         ),
     ),
-    opts=pulumi.ResourceOptions(depends_on=[ns, ksa]),
+    opts=pulumi.ResourceOptions(provider=k8s_provider, depends_on=[ns, ksa]),
 )
 
 chromadb_svc = k8s.core.v1.Service(
@@ -231,7 +242,7 @@ chromadb_svc = k8s.core.v1.Service(
         selector=chromadb_labels,
         ports=[k8s.core.v1.ServicePortArgs(port=8000, target_port=8000)],
     ),
-    opts=pulumi.ResourceOptions(depends_on=[ns]),
+    opts=pulumi.ResourceOptions(provider=k8s_provider, depends_on=[ns]),
 )
 
 # ---------------------------------------------------------------------------
@@ -296,7 +307,7 @@ frontend_deployment = k8s.apps.v1.Deployment(
             ),
         ),
     ),
-    opts=pulumi.ResourceOptions(depends_on=[ns, ksa]),
+    opts=pulumi.ResourceOptions(provider=k8s_provider, depends_on=[ns, ksa]),
 )
 
 frontend_svc = k8s.core.v1.Service(
@@ -307,7 +318,7 @@ frontend_svc = k8s.core.v1.Service(
         selector=frontend_labels,
         ports=[k8s.core.v1.ServicePortArgs(port=8501, target_port=8501)],
     ),
-    opts=pulumi.ResourceOptions(depends_on=[ns]),
+    opts=pulumi.ResourceOptions(provider=k8s_provider, depends_on=[ns]),
 )
 
 # ---------------------------------------------------------------------------

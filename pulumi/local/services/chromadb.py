@@ -7,7 +7,9 @@ from services import network
 chromadb_image = docker.Image(
     "chromadb-image",
     image_name="pixplore/chromadb:latest",
-    build=docker.DockerBuildArgs(context="../../src/vectordb"),
+    build=docker.DockerBuildArgs(
+        context="../../src", dockerfile="../../src/vectordb/Dockerfile"
+    ),
     skip_push=True,
 )
 

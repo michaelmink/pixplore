@@ -1,3 +1,5 @@
+import os
+
 import pulumi
 import pulumi_docker as docker
 from services import network
@@ -15,6 +17,9 @@ controller_image = docker.Image(
     skip_push=True,
 )
 
+# Lokale ADC des Users in den Container reichen, damit pyiceberg/gcsfs auf GCS zugreifen kann
+adc_path = os.path.expanduser("~/.config/gcloud/application_default_credentials.json")
+
 controller_container = docker.Container(
     "controller",
     name="controller",
@@ -26,15 +31,21 @@ controller_container = docker.Container(
         "OTEL_SERVICE_NAME=controller",
         "OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317",
         "OTEL_LOGS_EXPORTER=none",
-        "JAVA_API_URL=http://java_api:8080",
+        "JAVA_API_URL=http://java-api:8080",
         "WORKER_TAGS_ADDR=worker_tags:50051",
         "WORKER_THUMBNAILS_ADDR=worker_thumbnails:50052",
         "WORKER_EMBEDDINGS_ADDR=dns:///worker_embeddings:50053",
+        "GOOGLE_APPLICATION_CREDENTIALS=/gcp/adc.json",
     ],
     volumes=[
         docker.ContainerVolumeArgs(
             host_path="/tmp/images", container_path="/tmp/images"
-        )
+        ),
+        docker.ContainerVolumeArgs(
+            host_path=adc_path,
+            container_path="/gcp/adc.json",
+            read_only=True,
+        ),
     ],
     networks_advanced=[docker.ContainerNetworksAdvancedArgs(name=network.name)],
     opts=pulumi.ResourceOptions(

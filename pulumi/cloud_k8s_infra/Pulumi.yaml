@@ -1,0 +1,6 @@
+name: pixplore-k8s-infra
+runtime:
+  name: python
+  options:
+    virtualenv: venv
+description: Pixplore GKE Autopilot cluster (infrastructure)

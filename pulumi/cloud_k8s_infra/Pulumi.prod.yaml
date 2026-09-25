@@ -1,0 +1,5 @@
+config:
+  gcp:project: pixplore-503406
+  gcp:region: europe-west3
+  pixplore-k8s-infra:cluster-name: pixplore-cluster
+encryptionsalt: v1:W/yHxAgDD1I=:v1:mJG5ofs7hsRmbb3E:xAI6rX9NJLiWVm+YAo7Idor4E+/wig==

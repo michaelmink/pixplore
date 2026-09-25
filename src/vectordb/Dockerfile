@@ -8,8 +8,9 @@ RUN apt-get update \
 
 RUN pip install --no-cache-dir chromadb==1.5.9 pyarrow "pyiceberg[gcsfs,sql-sqlite]"
 
-COPY initialize.py /initialize.py
-COPY start.sh /start.sh
+COPY shared /shared
+COPY vectordb/initialize.py /initialize.py
+COPY vectordb/start.sh /start.sh
 RUN chmod +x /start.sh
 
 ENTRYPOINT ["/start.sh"]
